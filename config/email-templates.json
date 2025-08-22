@@ -1,0 +1,127 @@
+{
+  "emailConfiguration": {
+    "domain": "gitstream.com",
+    "fromAddress": "noreply@gitstream.com",
+    "replyToAddress": "support@gitstream.com",
+    "sesRegion": "us-east-1",
+    "configurationSet": "gitstream-auth"
+  },
+  "templates": {
+    "verification": {
+      "templateName": "gitstream-email-verification",
+      "subject": "Verify your GitStream account",
+      "description": "Email verification template for new user registration",
+      "variables": [
+        "name",
+        "verificationLink",
+        "portalDomain"
+      ],
+      "htmlTemplate": "verification-email.html",
+      "textTemplate": "verification-email.txt"
+    },
+    "passwordReset": {
+      "templateName": "gitstream-password-reset",
+      "subject": "Reset your GitStream password",
+      "description": "Password reset template for account recovery",
+      "variables": [
+        "name",
+        "resetLink",
+        "customDomain"
+      ],
+      "htmlTemplate": "password-reset-email.html",
+      "textTemplate": "password-reset-email.txt"
+    },
+    "welcome": {
+      "templateName": "gitstream-welcome",
+      "subject": "Welcome to GitStream!",
+      "description": "Welcome email template sent after successful registration",
+      "variables": [
+        "name",
+        "portalDomain"
+      ],
+      "htmlTemplate": "welcome-email.html",
+      "textTemplate": "welcome-email.txt"
+    },
+    "loginNotification": {
+      "templateName": "gitstream-login-notification",
+      "subject": "New sign-in to your GitStream account",
+      "description": "Security notification for new login attempts",
+      "variables": [
+        "name",
+        "loginTime",
+        "location",
+        "device",
+        "ipAddress",
+        "customDomain",
+        "portalDomain"
+      ],
+      "htmlTemplate": "login-notification-email.html",
+      "textTemplate": "login-notification-email.txt"
+    },
+    "accountLocked": {
+      "templateName": "gitstream-account-locked",
+      "subject": "Your GitStream account has been temporarily locked",
+      "description": "Account security notification for locked accounts",
+      "variables": [
+        "name",
+        "lockReason",
+        "unlockTime",
+        "supportLink",
+        "customDomain"
+      ],
+      "htmlTemplate": "account-locked-email.html",
+      "textTemplate": "account-locked-email.txt"
+    },
+    "passwordChanged": {
+      "templateName": "gitstream-password-changed",
+      "subject": "Your GitStream password has been changed",
+      "description": "Confirmation notification for password changes",
+      "variables": [
+        "name",
+        "changeTime",
+        "supportLink",
+        "customDomain"
+      ],
+      "htmlTemplate": "password-changed-email.html",
+      "textTemplate": "password-changed-email.txt"
+    }
+  },
+  "brandingConfiguration": {
+    "logoUrl": "https://gitstream.com/assets/logo.png",
+    "primaryColor": "#667eea",
+    "secondaryColor": "#764ba2",
+    "backgroundColor": "#f8f9fa",
+    "textColor": "#333333",
+    "supportEmail": "support@gitstream.com",
+    "supportUrl": "https://gitstream.com/support",
+    "privacyPolicyUrl": "https://gitstream.com/privacy",
+    "termsOfServiceUrl": "https://gitstream.com/terms"
+  },
+  "deliverabilitySettings": {
+    "enableDkimSigning": true,
+    "enableOpenTracking": false,
+    "enableClickTracking": false,
+    "enableBounceTracking": true,
+    "enableComplaintTracking": true,
+    "suppressionListEnabled": true,
+    "maxRetryAttempts": 3,
+    "retryDelayMinutes": 5
+  },
+  "environmentOverrides": {
+    "dev": {
+      "domain": "dev.gitstream.com",
+      "fromAddress": "noreply@dev.gitstream.com",
+      "configurationSet": "gitstream-auth-dev"
+    },
+    "staging": {
+      "domain": "staging.gitstream.com", 
+      "fromAddress": "noreply@staging.gitstream.com",
+      "configurationSet": "gitstream-auth-staging"
+    },
+    "prod": {
+      "domain": "gitstream.com",
+      "fromAddress": "noreply@gitstream.com",
+      "configurationSet": "gitstream-auth-prod"
+    }
+  }
+}

@@ -70,8 +70,14 @@ Parameters:
     Description: ARN of SES identity for sending emails (optional)
     Default: ""
 
+  SESRoleArn:
+    Type: String
+    Description: ARN of SES IAM role for email sending (optional)
+    Default: ""
+
 Conditions:
   HasSESSourceArn: !Not [!Equals [!Ref SESSourceArn, ""]]
+  HasSESRoleArn: !Not [!Equals [!Ref SESRoleArn, ""]]
   HasMicrosoftCredentials: !Not [!Equals [!Ref MicrosoftClientId, ""]]
   HasLinkedInCredentials: !Not [!Equals [!Ref LinkedInClientId, ""]]
 

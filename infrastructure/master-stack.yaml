@@ -91,7 +91,7 @@ Resources:
   # Cognito User Pool Stack
   CognitoStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: CertificateStack
+    DependsOn: [CertificateStack, SESTemplatesStack]
     Properties:
       TemplateURL: './cognito-user-pool.yaml'
       Parameters:
@@ -107,6 +107,8 @@ Resources:
         CallbackUrls: !Join [",", !Ref CallbackUrls]
         LogoutUrls: !Join [",", !Ref LogoutUrls]
         SESEmailAddress: !Ref SESEmailAddress
+        SESSourceArn: !GetAtt SESTemplatesStack.Outputs.SESIdentityArn
+        SESRoleArn: !GetAtt SESTemplatesStack.Outputs.SESRoleArn
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -114,6 +116,24 @@ Resources:
           Value: GitStream
         - Key: Component
           Value: Cognito-UserPool
+
+  # SES Email Templates Stack
+  SESTemplatesStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: CertificateStack
+    Properties:
+      TemplateURL: './ses-email-templates.yaml'
+      Parameters:
+        Environment: !Ref Environment
+        SESEmailAddress: !Ref SESEmailAddress
+        CustomDomain: !Ref CustomDomain
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: GitStream
+        - Key: Component
+          Value: SES-Templates
 
   # CloudWatch Logging Stack
   LoggingStack:
@@ -184,6 +204,43 @@ Outputs:
     Export:
       Name: !Sub '${Environment}-GitStream-CertificateArn'
 
+  # SES Email Templates Outputs
+  SESRoleArn:
+    Description: 'ARN of the SES IAM Role for Cognito'
+    Value: !GetAtt SESTemplatesStack.Outputs.SESRoleArn
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESRoleArn'
+
+  SESIdentityArn:
+    Description: 'ARN of the SES Identity'
+    Value: !GetAtt SESTemplatesStack.Outputs.SESIdentityArn
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESIdentityArn'
+
+  PasswordResetTemplate:
+    Description: 'Password Reset Email Template Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.PasswordResetTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-PasswordResetTemplate'
+
+  WelcomeTemplate:
+    Description: 'Welcome Email Template Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.WelcomeTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-WelcomeTemplate'
+
+  LoginNotificationTemplate:
+    Description: 'Login Notification Email Template Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.LoginNotificationTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-LoginNotificationTemplate'
+
+  SESConfigurationSet:
+    Description: 'SES Configuration Set Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.SESConfigurationSet
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESConfigurationSet'
+
   # Logging Outputs
   AuthEventsLogGroup:
     Description: 'CloudWatch Log Group for Auth Events'
@@ -208,14 +265,17 @@ Outputs:
   StackStatus:
     Description: 'Deployment status and next steps'
     Value: !Sub |
-      GitStream Cognito Infrastructure deployed successfully!
+      GitStream Cognito Infrastructure with Email Templates deployed successfully!
       
       Next steps:
       1. Configure DNS for domain ${CustomDomain} if not using Route 53
       2. Verify SSL certificate validation
-      3. Test OAuth providers in Cognito console
-      4. Configure application with UserPoolId and ClientId
-      5. Monitor CloudWatch dashboard for authentication metrics
+      3. Verify SES email domain and complete DKIM setup
+      4. Test OAuth providers in Cognito console
+      5. Test email delivery (verification, password reset, welcome emails)
+      6. Configure application with UserPoolId and ClientId
+      7. Monitor CloudWatch dashboard for authentication and email metrics
       
       Environment: ${Environment}
       Region: ${AWS::Region}
+      SES Email: ${SESEmailAddress}
