@@ -1,0 +1,383 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Certificate Manager SSL Certificate for GitStream Cognito Custom Domain'
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Domain name for the SSL certificate (e.g., auth.gitstream.com)
+    
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for domain validation
+    Default: ""
+    
+  ValidationMethod:
+    Type: String
+    Default: DNS
+    AllowedValues: [DNS, EMAIL]
+    Description: Certificate validation method
+    
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource tagging
+    
+  AlternativeNames:
+    Type: CommaDelimitedList
+    Description: Alternative domain names for the certificate (optional)
+    Default: ""
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+  HasAlternativeNames: !Not [!Equals [!Join ["", !Ref AlternativeNames], ""]]
+  UseDNSValidation: !Equals [!Ref ValidationMethod, "DNS"]
+
+Resources:
+  # SSL Certificate
+  GitStreamSSLCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames: !If
+        - HasAlternativeNames
+        - !Ref AlternativeNames
+        - !Ref "AWS::NoValue"
+      ValidationMethod: !Ref ValidationMethod
+      DomainValidationOptions: !If
+        - UseDNSValidation
+        - - DomainName: !Ref DomainName
+            HostedZoneId: !If [HasHostedZone, !Ref HostedZoneId, !Ref "AWS::NoValue"]
+        - !Ref "AWS::NoValue"
+      Tags:
+        - Key: Name
+          Value: !Sub 'gitstream-ssl-certificate-${Environment}'
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: GitStream
+        - Key: Component
+          Value: Authentication
+        - Key: Purpose
+          Value: Cognito-Custom-Domain
+
+  # CloudWatch Alarm for Certificate Expiration
+  CertificateExpirationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'GitStream-SSLCertificate-Expiration-${Environment}'
+      AlarmDescription: 'SSL Certificate is approaching expiration'
+      MetricName: DaysToExpiry
+      Namespace: AWS/CertificateManager
+      Statistic: Minimum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 1
+      Threshold: 30  # Alert 30 days before expiration
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: CertificateArn
+          Value: !Ref GitStreamSSLCertificate
+      TreatMissingData: breaching
+
+  # SNS Topic for Certificate Alerts
+  CertificateAlertsSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'gitstream-certificate-alerts-${Environment}'
+      DisplayName: 'GitStream Certificate Alerts'
+      
+  # Lambda function for certificate monitoring and auto-renewal notification
+  CertificateMonitoringFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'gitstream-certificate-monitor-${Environment}'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt CertificateMonitoringRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          CERTIFICATE_ARN: !Ref GitStreamSSLCertificate
+          SNS_TOPIC_ARN: !Ref CertificateAlertsSnsTopic
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime, timedelta
+
+          acm_client = boto3.client('acm')
+          sns_client = boto3.client('sns')
+          cloudwatch = boto3.client('cloudwatch')
+
+          def lambda_handler(event, context):
+              """Monitor SSL certificate status and send alerts"""
+              try:
+                  certificate_arn = os.environ['CERTIFICATE_ARN']
+                  
+                  # Get certificate details
+                  response = acm_client.describe_certificate(
+                      CertificateArn=certificate_arn
+                  )
+                  
+                  certificate = response['Certificate']
+                  status = certificate['Status']
+                  not_after = certificate.get('NotAfter')
+                  domain_name = certificate['DomainName']
+                  
+                  # Calculate days until expiration
+                  if not_after:
+                      days_until_expiry = (not_after.replace(tzinfo=None) - datetime.now()).days
+                      
+                      # Send custom metric to CloudWatch
+                      send_expiry_metric(days_until_expiry)
+                      
+                      # Check if we need to alert
+                      if days_until_expiry <= 30:
+                          send_expiry_alert(domain_name, days_until_expiry, status)
+                  
+                  # Check certificate status
+                  if status != 'ISSUED':
+                      send_status_alert(domain_name, status)
+                  
+                  # Check domain validation status
+                  check_domain_validation(certificate)
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'domain': domain_name,
+                          'status': status,
+                          'days_until_expiry': days_until_expiry if not_after else None
+                      })
+                  }
+                  
+              except Exception as e:
+                  print(f"Error monitoring certificate: {str(e)}")
+                  send_error_alert(str(e))
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({'error': str(e)})
+                  }
+
+          def send_expiry_metric(days_until_expiry):
+              """Send certificate expiry metric to CloudWatch"""
+              try:
+                  cloudwatch.put_metric_data(
+                      Namespace='GitStream/Certificate',
+                      MetricData=[
+                          {
+                              'MetricName': 'DaysToExpiry',
+                              'Value': days_until_expiry,
+                              'Unit': 'Count',
+                              'Timestamp': datetime.now(),
+                              'Dimensions': [
+                                  {
+                                      'Name': 'Environment',
+                                      'Value': os.environ['ENVIRONMENT']
+                                  },
+                                  {
+                                      'Name': 'CertificateArn',
+                                      'Value': os.environ['CERTIFICATE_ARN']
+                                  }
+                              ]
+                          }
+                      ]
+                  )
+              except Exception as e:
+                  print(f"Error sending metric: {str(e)}")
+
+          def send_expiry_alert(domain_name, days_until_expiry, status):
+              """Send certificate expiration alert"""
+              try:
+                  message = f"""
+          SSL Certificate Expiration Alert
+
+          Domain: {domain_name}
+          Status: {status}
+          Days until expiry: {days_until_expiry}
+          Environment: {os.environ['ENVIRONMENT']}
+
+          Action required: 
+          - If this certificate is set to auto-renew, monitor the renewal process
+          - If manual renewal is required, initiate the renewal process immediately
+          - Verify that the renewed certificate is properly deployed to all services
+
+          Certificate ARN: {os.environ['CERTIFICATE_ARN']}
+                  """
+                  
+                  sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Subject=f"SSL Certificate Expiring - {domain_name} ({days_until_expiry} days)",
+                      Message=message
+                  )
+              except Exception as e:
+                  print(f"Error sending expiry alert: {str(e)}")
+
+          def send_status_alert(domain_name, status):
+              """Send certificate status alert"""
+              try:
+                  message = f"""
+          SSL Certificate Status Alert
+
+          Domain: {domain_name}
+          Current Status: {status}
+          Environment: {os.environ['ENVIRONMENT']}
+
+          Expected Status: ISSUED
+          
+          Action required: Check certificate validation and resolve any issues.
+
+          Certificate ARN: {os.environ['CERTIFICATE_ARN']}
+                  """
+                  
+                  sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Subject=f"SSL Certificate Status Issue - {domain_name}",
+                      Message=message
+                  )
+              except Exception as e:
+                  print(f"Error sending status alert: {str(e)}")
+
+          def check_domain_validation(certificate):
+              """Check domain validation status"""
+              domain_validation_options = certificate.get('DomainValidationOptions', [])
+              
+              for option in domain_validation_options:
+                  domain_name = option['DomainName']
+                  validation_status = option['ValidationStatus']
+                  
+                  if validation_status != 'SUCCESS':
+                      send_validation_alert(domain_name, validation_status)
+
+          def send_validation_alert(domain_name, validation_status):
+              """Send domain validation alert"""
+              try:
+                  message = f"""
+          SSL Certificate Domain Validation Alert
+
+          Domain: {domain_name}
+          Validation Status: {validation_status}
+          Environment: {os.environ['ENVIRONMENT']}
+
+          Action required: Complete domain validation for this certificate.
+
+          Certificate ARN: {os.environ['CERTIFICATE_ARN']}
+                  """
+                  
+                  sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Subject=f"SSL Certificate Validation Issue - {domain_name}",
+                      Message=message
+                  )
+              except Exception as e:
+                  print(f"Error sending validation alert: {str(e)}")
+
+          def send_error_alert(error_message):
+              """Send error alert"""
+              try:
+                  message = f"""
+          SSL Certificate Monitoring Error
+
+          Error: {error_message}
+          Environment: {os.environ['ENVIRONMENT']}
+          Function: gitstream-certificate-monitor
+
+          Action required: Check Lambda function logs and resolve the issue.
+
+          Certificate ARN: {os.environ['CERTIFICATE_ARN']}
+                  """
+                  
+                  sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Subject=f"Certificate Monitoring Error - {os.environ['ENVIRONMENT']}",
+                      Message=message
+                  )
+              except Exception as e:
+                  print(f"Error sending error alert: {str(e)}")
+
+  # IAM Role for Certificate Monitoring Lambda
+  CertificateMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GitStreamCertificateMonitoringRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CertificateMonitoringPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DescribeCertificate
+                  - acm:ListCertificates
+                Resource: !Ref GitStreamSSLCertificate
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref CertificateAlertsSnsTopic
+
+  # EventBridge Rule for periodic certificate monitoring
+  CertificateMonitoringSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'gitstream-certificate-monitoring-${Environment}'
+      Description: 'Schedule for SSL certificate monitoring'
+      ScheduleExpression: 'rate(1 day)'  # Check daily
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CertificateMonitoringFunction.Arn
+          Id: 'CertificateMonitoringTarget'
+
+  # Permission for EventBridge to invoke Lambda
+  CertificateMonitoringInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CertificateMonitoringFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CertificateMonitoringSchedule.Arn
+
+Outputs:
+  CertificateArn:
+    Description: 'ARN of the SSL Certificate'
+    Value: !Ref GitStreamSSLCertificate
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateArn'
+
+  CertificateStatus:
+    Description: 'Status of the SSL Certificate'
+    Value: !GetAtt GitStreamSSLCertificate.Status
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateStatus'
+
+  CertificateDomainName:
+    Description: 'Domain name of the SSL Certificate'
+    Value: !Ref DomainName
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateDomain'
+
+  CertificateAlertsSnsTopic:
+    Description: 'SNS Topic for Certificate Alerts'
+    Value: !Ref CertificateAlertsSnsTopic
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateAlertsTopic'
+
+  CertificateMonitoringFunction:
+    Description: 'Lambda Function for Certificate Monitoring'
+    Value: !Ref CertificateMonitoringFunction
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateMonitoringFunction'
