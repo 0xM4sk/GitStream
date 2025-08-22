@@ -1,0 +1,299 @@
+{
+  "cognito": {
+    "user_pool": {
+      "name": "GitStreamUserPool",
+      "description": "User pool for GitStream application authentication",
+      "configuration": {
+        "alias_attributes": ["email"],
+        "auto_verified_attributes": ["email"],
+        "mfa_configuration": "OPTIONAL",
+        "mfa_types": ["SMS_MFA"],
+        "password_policy": {
+          "minimum_length": 8,
+          "require_uppercase": true,
+          "require_lowercase": true,
+          "require_numbers": true,
+          "require_symbols": true,
+          "temporary_password_validity_days": 7
+        },
+        "user_pool_tags": {
+          "Environment": "${ENVIRONMENT}",
+          "Application": "GitStream",
+          "ManagedBy": "CloudFormation"
+        },
+        "deletion_protection": "ACTIVE",
+        "account_recovery_setting": {
+          "recovery_mechanisms": [
+            {
+              "name": "verified_email",
+              "priority": 1
+            }
+          ]
+        },
+        "admin_create_user_config": {
+          "allow_admin_create_user_only": false,
+          "invite_message_action": "EMAIL",
+          "temporary_password_validity_days": 7
+        },
+        "device_configuration": {
+          "challenge_required_on_new_device": true,
+          "device_only_remembered_on_user_prompt": false
+        },
+        "email_configuration": {
+          "email_sending_account": "COGNITO_DEFAULT",
+          "reply_to_email_address": "noreply@gitstream.com"
+        },
+        "lambda_config": {},
+        "user_attribute_update_settings": {
+          "attributes_require_verification_before_update": ["email"]
+        },
+        "verification_message_template": {
+          "default_email_option": "CONFIRM_WITH_CODE",
+          "email_subject": "GitStream - Verify your email address",
+          "email_message": "Your verification code for GitStream is {####}"
+        }
+      }
+    },
+    "user_pool_client": {
+      "name": "GitStreamWebClient",
+      "description": "Web client for GitStream OAuth authentication",
+      "configuration": {
+        "generate_secret": false,
+        "refresh_token_validity": 30,
+        "access_token_validity": 60,
+        "id_token_validity": 60,
+        "token_validity_units": {
+          "access_token": "minutes",
+          "id_token": "minutes",
+          "refresh_token": "days"
+        },
+        "read_attributes": [
+          "email",
+          "email_verified",
+          "given_name",
+          "family_name",
+          "picture",
+          "preferred_username"
+        ],
+        "write_attributes": [
+          "email",
+          "given_name",
+          "family_name",
+          "picture",
+          "preferred_username"
+        ],
+        "explicit_auth_flows": [
+          "ALLOW_USER_SRP_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH",
+          "ALLOW_USER_PASSWORD_AUTH"
+        ],
+        "supported_identity_providers": [
+          "COGNITO",
+          "Google",
+          "LoginWithAmazon",
+          "Facebook"
+        ],
+        "callback_urls": "${CALLBACK_URLS}",
+        "logout_urls": "${LOGOUT_URLS}",
+        "allowed_o_auth_flows": [
+          "code",
+          "implicit"
+        ],
+        "allowed_o_auth_scopes": [
+          "openid",
+          "email",
+          "profile",
+          "aws.cognito.signin.user.admin"
+        ],
+        "allowed_o_auth_flows_user_pool_client": true,
+        "prevent_user_existence_errors": "ENABLED",
+        "enable_token_revocation": true
+      }
+    },
+    "user_pool_domain": {
+      "domain": "${COGNITO_DOMAIN}",
+      "certificate_arn": "${SSL_CERTIFICATE_ARN}",
+      "custom_domain_config": {
+        "certificate_arn": "${SSL_CERTIFICATE_ARN}"
+      }
+    },
+    "identity_providers": {
+      "google": {
+        "provider_name": "Google",
+        "provider_type": "Google",
+        "provider_details": {
+          "client_id": "${GOOGLE_CLIENT_ID}",
+          "client_secret": "${GOOGLE_CLIENT_SECRET}",
+          "authorize_scopes": "openid email profile"
+        },
+        "attribute_mapping": {
+          "email": "email",
+          "given_name": "given_name",
+          "family_name": "family_name",
+          "picture": "picture",
+          "username": "sub"
+        },
+        "idp_identifiers": []
+      },
+      "facebook": {
+        "provider_name": "Facebook",
+        "provider_type": "Facebook",
+        "provider_details": {
+          "client_id": "${FACEBOOK_APP_ID}",
+          "client_secret": "${FACEBOOK_APP_SECRET}",
+          "authorize_scopes": "public_profile,email"
+        },
+        "attribute_mapping": {
+          "email": "email",
+          "given_name": "first_name",
+          "family_name": "last_name",
+          "picture": "picture",
+          "username": "id"
+        },
+        "idp_identifiers": []
+      },
+      "amazon": {
+        "provider_name": "LoginWithAmazon",
+        "provider_type": "LoginWithAmazon",
+        "provider_details": {
+          "client_id": "${AMAZON_CLIENT_ID}",
+          "client_secret": "${AMAZON_CLIENT_SECRET}",
+          "authorize_scopes": "profile"
+        },
+        "attribute_mapping": {
+          "email": "email",
+          "given_name": "name",
+          "username": "user_id"
+        },
+        "idp_identifiers": []
+      }
+    },
+    "cloudwatch_config": {
+      "log_group": "/aws/cognito/gitstream-user-pool",
+      "log_events": [
+        "UserAuthentication_Success",
+        "UserAuthentication_Failure",
+        "UserRegistration_Success",
+        "UserRegistration_Failure",
+        "PasswordReset_Success",
+        "PasswordReset_Failure",
+        "TokenRefresh_Success",
+        "TokenRefresh_Failure"
+      ],
+      "metrics": {
+        "namespace": "AWS/Cognito",
+        "custom_metrics": [
+          {
+            "name": "SuccessfulLogins",
+            "filter": "UserAuthentication_Success"
+          },
+          {
+            "name": "FailedLogins",
+            "filter": "UserAuthentication_Failure"
+          },
+          {
+            "name": "NewRegistrations",
+            "filter": "UserRegistration_Success"
+          }
+        ]
+      }
+    }
+  },
+  "environment_variables": {
+    "development": {
+      "COGNITO_DOMAIN": "auth-dev.gitstream.com",
+      "CALLBACK_URLS": [
+        "http://localhost:3000/auth/callback",
+        "http://localhost:3001/auth/callback",
+        "https://auth-dev.gitstream.com/oauth2/idpresponse"
+      ],
+      "LOGOUT_URLS": [
+        "http://localhost:3000/auth/logout",
+        "http://localhost:3001/auth/logout",
+        "https://auth-dev.gitstream.com/logout"
+      ]
+    },
+    "staging": {
+      "COGNITO_DOMAIN": "auth-staging.gitstream.com",
+      "CALLBACK_URLS": [
+        "https://staging.gitstream.com/auth/callback",
+        "https://auth-staging.gitstream.com/oauth2/idpresponse"
+      ],
+      "LOGOUT_URLS": [
+        "https://staging.gitstream.com/auth/logout",
+        "https://auth-staging.gitstream.com/logout"
+      ]
+    },
+    "production": {
+      "COGNITO_DOMAIN": "auth.gitstream.com",
+      "CALLBACK_URLS": [
+        "https://gitstream.com/auth/callback",
+        "https://auth.gitstream.com/oauth2/idpresponse"
+      ],
+      "LOGOUT_URLS": [
+        "https://gitstream.com/auth/logout",
+        "https://auth.gitstream.com/logout"
+      ]
+    }
+  },
+  "security_best_practices": {
+    "recommendations": [
+      "Use AWS Secrets Manager for storing OAuth client secrets",
+      "Enable CloudTrail logging for all Cognito API calls",
+      "Implement custom authentication challenges for enhanced security",
+      "Configure proper CORS settings for web clients",
+      "Use short-lived access tokens with refresh token rotation",
+      "Implement rate limiting to prevent brute force attacks",
+      "Enable MFA for administrative accounts",
+      "Regularly audit and rotate OAuth client credentials",
+      "Monitor authentication events for suspicious patterns",
+      "Implement proper session management and logout procedures"
+    ],
+    "compliance": {
+      "gdpr": {
+        "data_retention_days": 365,
+        "user_deletion_support": true,
+        "data_export_support": true
+      },
+      "ccpa": {
+        "data_deletion_support": true,
+        "data_access_support": true
+      }
+    }
+  },
+  "validation": {
+    "required_environment_variables": [
+      "ENVIRONMENT",
+      "COGNITO_DOMAIN",
+      "SSL_CERTIFICATE_ARN",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "CALLBACK_URLS",
+      "LOGOUT_URLS"
+    ],
+    "optional_environment_variables": [
+      "FACEBOOK_APP_ID",
+      "FACEBOOK_APP_SECRET",
+      "AMAZON_CLIENT_ID",
+      "AMAZON_CLIENT_SECRET"
+    ],
+    "configuration_tests": [
+      {
+        "name": "validate_callback_urls",
+        "description": "Ensure all callback URLs use HTTPS in production"
+      },
+      {
+        "name": "validate_oauth_scopes",
+        "description": "Verify OAuth scopes match provider requirements"
+      },
+      {
+        "name": "validate_token_expiry",
+        "description": "Ensure token validity periods are within security guidelines"
+      },
+      {
+        "name": "validate_ssl_certificate",
+        "description": "Verify SSL certificate is valid and not expired"
+      }
+    ]
+  }
+}
