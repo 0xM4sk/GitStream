@@ -1,0 +1,428 @@
+/**
+ * User Profile Component Styles
+ * Responsive design for both compact and full profile views
+ */
+
+.user-profile {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  color: #2d3748;
+}
+
+.user-profile__container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* Loading State */
+.user-profile--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.user-profile__loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #718096;
+  font-size: 16px;
+}
+
+.user-profile__spinner {
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Compact View */
+.user-profile--compact {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+}
+
+.user-profile__compact-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-profile__compact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-profile__compact-info .user-profile__name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2d3748;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-profile__compact-info .user-profile__provider-badge {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* Header */
+.user-profile__header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.user-profile__header-info {
+  flex: 1;
+}
+
+.user-profile__name {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: white;
+}
+
+.user-profile__email {
+  font-size: 16px;
+  margin: 0 0 12px 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Avatar */
+.user-profile__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.2);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-profile__avatar--small {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #e2e8f0;
+  background: #f7fafc;
+}
+
+.user-profile__avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-profile__avatar-initials {
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+}
+
+.user-profile__avatar--small .user-profile__avatar-initials {
+  font-size: 14px;
+  color: #4a5568;
+}
+
+/* Provider Info */
+.user-profile__provider-info {
+  margin-top: 8px;
+}
+
+.user-profile__provider-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  font-size: 14px;
+  color: white;
+}
+
+.user-profile--compact .user-profile__provider-badge {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  color: #718096;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.user-profile__provider-icon {
+  font-size: 14px;
+}
+
+.user-profile__provider-name,
+.user-profile__provider-text {
+  font-weight: 500;
+}
+
+/* Details Section */
+.user-profile__details {
+  border-top: 1px solid #e2e8f0;
+}
+
+.user-profile__details-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  font-weight: 500;
+  color: #2d3748;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.user-profile__details-toggle:hover {
+  background: #f7fafc;
+}
+
+.user-profile__chevron {
+  transition: transform 0.2s ease;
+  color: #718096;
+}
+
+.user-profile__chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.user-profile__details-content {
+  padding: 0 24px 16px 24px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.user-profile__detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.user-profile__detail-row:last-child {
+  border-bottom: none;
+}
+
+.user-profile__detail-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #718096;
+  flex-shrink: 0;
+}
+
+.user-profile__detail-value {
+  font-size: 14px;
+  color: #2d3748;
+  text-align: right;
+  margin-left: 16px;
+  word-break: break-word;
+}
+
+/* Actions Section */
+.user-profile__actions {
+  border-top: 1px solid #e2e8f0;
+  padding: 24px;
+}
+
+.user-profile__logout-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 8px 0;
+}
+
+.user-profile__logout-description {
+  font-size: 14px;
+  color: #718096;
+  margin: 0 0 16px 0;
+}
+
+.user-profile__logout-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-profile__logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 2px solid;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.user-profile__logout-btn--local {
+  border-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.user-profile__logout-btn--local:hover:not(:disabled) {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.user-profile__logout-btn--global {
+  border-color: #feb2b2;
+  color: #c53030;
+}
+
+.user-profile__logout-btn--global:hover:not(:disabled) {
+  border-color: #fc8181;
+  background: #fed7d7;
+}
+
+.user-profile__logout-btn--compact {
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #718096;
+  min-width: 32px;
+  height: 32px;
+}
+
+.user-profile__logout-btn--compact:hover:not(:disabled) {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+}
+
+.user-profile__logout-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .user-profile__header {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+    padding: 20px;
+  }
+  
+  .user-profile__avatar {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .user-profile__avatar-initials {
+    font-size: 20px;
+  }
+  
+  .user-profile__name {
+    font-size: 20px;
+  }
+  
+  .user-profile__email {
+    font-size: 14px;
+  }
+  
+  .user-profile__details-content,
+  .user-profile__actions {
+    padding: 16px;
+  }
+  
+  .user-profile__detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .user-profile__detail-value {
+    text-align: left;
+    margin-left: 0;
+  }
+  
+  .user-profile__logout-buttons {
+    gap: 8px;
+  }
+  
+  .user-profile__logout-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-profile__compact-content {
+    gap: 8px;
+  }
+  
+  .user-profile__avatar--small {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .user-profile__avatar--small .user-profile__avatar-initials {
+    font-size: 12px;
+  }
+  
+  .user-profile__compact-info .user-profile__name {
+    font-size: 13px;
+  }
+  
+  .user-profile__compact-info .user-profile__provider-badge {
+    font-size: 11px;
+  }
+  
+  .user-profile__logout-btn--compact {
+    min-width: 28px;
+    height: 28px;
+    padding: 4px 6px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .user-profile__container {
+    border: 2px solid #000;
+  }
+  
+  .user-profile__logout-btn {
+    border-color: #000;
+  }
+  
+  .user-profile__logout-btn--global {
+    border-color: #c53030;
+    background: #fff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .user-profile__chevron,
+  .user-profile__logout-btn,
+  .user-profile__details-toggle,
+  .user-profile__spinner {
+    transition: none;
+    animation: none;
+  }
+}
