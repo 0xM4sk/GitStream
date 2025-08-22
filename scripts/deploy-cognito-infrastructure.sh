@@ -13,13 +13,37 @@ CUSTOM_DOMAIN="$DOMAIN_PREFIX.gitstream.com"
 
 echo "🚀 Deploying GitStream Cognito infrastructure for $ENVIRONMENT environment..."
 
-# Check prerequisites
+# Check prerequisites - Google OAuth is required
 if [ -z "$GOOGLE_CLIENT_ID" ] || [ -z "$GOOGLE_CLIENT_SECRET" ]; then
   echo "❌ Error: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables required"
   echo "Please set these variables with your Google OAuth credentials:"
   echo "  export GOOGLE_CLIENT_ID='your-client-id'"
   echo "  export GOOGLE_CLIENT_SECRET='your-client-secret'"
   exit 1
+fi
+
+# Check optional Microsoft OAuth credentials
+if [ -n "$MICROSOFT_CLIENT_ID" ] && [ -n "$MICROSOFT_CLIENT_SECRET" ]; then
+  echo "✅ Microsoft OAuth credentials found - will be configured"
+  MICROSOFT_ENABLED=true
+else
+  echo "⚠️  Microsoft OAuth credentials not found - provider will be disabled"
+  echo "   To enable Microsoft OAuth, set:"
+  echo "     export MICROSOFT_CLIENT_ID='your-microsoft-client-id'"
+  echo "     export MICROSOFT_CLIENT_SECRET='your-microsoft-client-secret'"
+  MICROSOFT_ENABLED=false
+fi
+
+# Check optional LinkedIn OAuth credentials  
+if [ -n "$LINKEDIN_CLIENT_ID" ] && [ -n "$LINKEDIN_CLIENT_SECRET" ]; then
+  echo "✅ LinkedIn OAuth credentials found - will be configured"
+  LINKEDIN_ENABLED=true
+else
+  echo "⚠️  LinkedIn OAuth credentials not found - provider will be disabled"
+  echo "   To enable LinkedIn OAuth, set:"
+  echo "     export LINKEDIN_CLIENT_ID='your-linkedin-client-id'"
+  echo "     export LINKEDIN_CLIENT_SECRET='your-linkedin-client-secret'"
+  LINKEDIN_ENABLED=false
 fi
 
 # Check AWS CLI is configured
@@ -36,6 +60,18 @@ echo "  Environment: $ENVIRONMENT"
 echo "  Custom Domain: $CUSTOM_DOMAIN"
 echo "  Alert Email: $ALERT_EMAIL"
 echo "  AWS Region: us-east-1 (required for Cognito custom domains)"
+echo "  OAuth Providers:"
+echo "    - Google: ✅ Enabled"
+if [ "$MICROSOFT_ENABLED" = true ]; then
+  echo "    - Microsoft: ✅ Enabled"
+else
+  echo "    - Microsoft: ❌ Disabled (no credentials)"
+fi
+if [ "$LINKEDIN_ENABLED" = true ]; then
+  echo "    - LinkedIn: ✅ Enabled"
+else
+  echo "    - LinkedIn: ❌ Disabled (no credentials)"
+fi
 echo ""
 
 # Request/get certificate ARN
@@ -99,19 +135,35 @@ else
   LOGOUT_URLS="http://localhost:3000/auth/logout,http://localhost:3001/auth/logout"
 fi
 
+# Prepare deployment parameters
+DEPLOY_PARAMS=(
+  "Environment=$ENVIRONMENT"
+  "CustomDomain=$CUSTOM_DOMAIN"
+  "CertificateArn=$CERT_ARN"
+  "GoogleClientId=$GOOGLE_CLIENT_ID"
+  "GoogleClientSecret=$GOOGLE_CLIENT_SECRET"
+  "CallbackUrls=$CALLBACK_URLS"
+  "LogoutUrls=$LOGOUT_URLS"
+)
+
+# Add Microsoft parameters if enabled
+if [ "$MICROSOFT_ENABLED" = true ]; then
+  DEPLOY_PARAMS+=("MicrosoftClientId=$MICROSOFT_CLIENT_ID")
+  DEPLOY_PARAMS+=("MicrosoftClientSecret=$MICROSOFT_CLIENT_SECRET")
+fi
+
+# Add LinkedIn parameters if enabled
+if [ "$LINKEDIN_ENABLED" = true ]; then
+  DEPLOY_PARAMS+=("LinkedInClientId=$LINKEDIN_CLIENT_ID")
+  DEPLOY_PARAMS+=("LinkedInClientSecret=$LINKEDIN_CLIENT_SECRET")
+fi
+
 # Deploy main infrastructure
 echo "🏗️  Deploying Cognito User Pool..."
 aws cloudformation deploy \
   --template-file infrastructure/cognito-user-pool.yaml \
   --stack-name gitstream-cognito-$ENVIRONMENT \
-  --parameter-overrides \
-    Environment=$ENVIRONMENT \
-    CustomDomain=$CUSTOM_DOMAIN \
-    CertificateArn=$CERT_ARN \
-    GoogleClientId=$GOOGLE_CLIENT_ID \
-    GoogleClientSecret=$GOOGLE_CLIENT_SECRET \
-    CallbackUrls="$CALLBACK_URLS" \
-    LogoutUrls="$LOGOUT_URLS" \
+  --parameter-overrides "${DEPLOY_PARAMS[@]}" \
   --capabilities CAPABILITY_NAMED_IAM \
   --region us-east-1
 

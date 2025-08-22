@@ -26,6 +26,30 @@ Parameters:
     Description: Google OAuth Client Secret
     NoEcho: true
   
+  MicrosoftClientId:
+    Type: String
+    Description: Microsoft OAuth Client ID
+    NoEcho: true
+    Default: ""
+  
+  MicrosoftClientSecret:
+    Type: String
+    Description: Microsoft OAuth Client Secret
+    NoEcho: true
+    Default: ""
+  
+  LinkedInClientId:
+    Type: String
+    Description: LinkedIn OAuth Client ID
+    NoEcho: true
+    Default: ""
+  
+  LinkedInClientSecret:
+    Type: String
+    Description: LinkedIn OAuth Client Secret
+    NoEcho: true
+    Default: ""
+  
   CallbackUrls:
     Type: CommaDelimitedList
     Description: Comma-delimited list of callback URLs
@@ -35,6 +59,21 @@ Parameters:
     Type: CommaDelimitedList
     Description: Comma-delimited list of logout URLs
     Default: "http://localhost:3000/auth/logout"
+  
+  SESEmailAddress:
+    Type: String
+    Description: SES verified email address for sending emails
+    Default: "noreply@gitstream.com"
+  
+  SESSourceArn:
+    Type: String
+    Description: ARN of SES identity for sending emails (optional)
+    Default: ""
+
+Conditions:
+  HasSESSourceArn: !Not [!Equals [!Ref SESSourceArn, ""]]
+  HasMicrosoftCredentials: !Not [!Equals [!Ref MicrosoftClientId, ""]]
+  HasLinkedInCredentials: !Not [!Equals [!Ref LinkedInClientId, ""]]
 
 Resources:
   # Cognito User Pool
@@ -50,12 +89,23 @@ Resources:
         - email
       Policies:
         PasswordPolicy:
-          MinimumLength: 8
+          MinimumLength: 12
           RequireUppercase: true
           RequireLowercase: true
           RequireNumbers: true
           RequireSymbols: true
           TemporaryPasswordValidityDays: 7
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+          - Name: verified_phone_number
+            Priority: 2
+      UsernameAttributes:
+        - email
+      DeviceConfiguration:
+        ChallengeRequiredOnNewDevice: true
+        DeviceOnlyRememberedOnUserPrompt: false
       MfaConfiguration: OPTIONAL
       EnabledMfas:
         - SMS_MFA
@@ -88,15 +138,64 @@ Resources:
         Project: GitStream
         Component: Authentication
       EmailConfiguration:
-        EmailSendingAccount: COGNITO_DEFAULT
+        EmailSendingAccount: DEVELOPER
+        SourceArn: !If [HasSESSourceArn, !Ref SESSourceArn, !Ref "AWS::NoValue"]
+        From: !Ref SESEmailAddress
+        ReplyToEmailAddress: !Sub "support@${SESEmailAddress}"
       VerificationMessageTemplate:
         DefaultEmailOption: CONFIRM_WITH_LINK
         EmailSubject: 'Verify your GitStream account'
         EmailMessage: !Sub |
-          Welcome to GitStream! Please click the link below to verify your email address:
-          {##Verify Email##}
-          
-          If you didn't create this account, you can safely ignore this email.
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify your GitStream account</title>
+          </head>
+          <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to GitStream!</h1>
+            </div>
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+              <h2 style="color: #495057; margin-top: 0;">Verify your email address</h2>
+              <p style="font-size: 16px; margin-bottom: 25px;">Thanks for signing up! Please click the button below to verify your email address and complete your account setup.</p>
+              <div style="text-align: center; margin: 30px 0;">
+                {##Verify Email##}
+              </div>
+              <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If you didn't create this account, you can safely ignore this email.</p>
+              <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+              <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+            </div>
+          </body>
+          </html>
+        EmailSubjectByLink: 'Verify your GitStream account'
+        EmailMessageByLink: !Sub |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify your GitStream account</title>
+          </head>
+          <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to GitStream!</h1>
+            </div>
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+              <h2 style="color: #495057; margin-top: 0;">Verify your email address</h2>
+              <p style="font-size: 16px; margin-bottom: 25px;">Thanks for signing up! Please click the link below to verify your email address and complete your account setup.</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{##Click Here##}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+              </div>
+              <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If the button doesn't work, copy and paste this link into your browser:</p>
+              <p style="font-size: 12px; color: #007bff; word-break: break-all;">{##Click Here##}</p>
+              <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If you didn't create this account, you can safely ignore this email.</p>
+              <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+              <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+            </div>
+          </body>
+          </html>
       UserPoolAddOns:
         AdvancedSecurityMode: ENFORCED
       AdminCreateUserConfig:
@@ -105,10 +204,33 @@ Resources:
         InviteMessageTemplate:
           EmailSubject: 'Your GitStream account has been created'
           EmailMessage: !Sub |
-            Welcome to GitStream! Your account has been created.
-            Username: {username}
-            Temporary password: {####}
-            Please sign in and change your password.
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Your GitStream account has been created</title>
+            </head>
+            <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to GitStream!</h1>
+              </div>
+              <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+                <h2 style="color: #495057; margin-top: 0;">Your account has been created</h2>
+                <p style="font-size: 16px; margin-bottom: 25px;">An administrator has created a GitStream account for you. Please use the credentials below to sign in and set your permanent password.</p>
+                <div style="background: #fff; border: 1px solid #dee2e6; border-radius: 5px; padding: 20px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Username:</strong> {username}</p>
+                  <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #f8f9fa; padding: 2px 5px; border-radius: 3px;">{####}</code></p>
+                </div>
+                <p style="font-size: 14px; color: #dc3545; margin: 20px 0;"><strong>Important:</strong> This temporary password will expire in 7 days. Please sign in and change it as soon as possible.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="https://${CustomDomain}/login" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Sign In to GitStream</a>
+                </div>
+                <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+                <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+              </div>
+            </body>
+            </html>
 
   # IAM Role for SMS MFA
   CognitoSMSRole:
@@ -146,6 +268,8 @@ Resources:
       SupportedIdentityProviders:
         - COGNITO
         - Google
+        - Microsoft
+        - LinkedIn
       CallbackURLs: !Ref CallbackUrls
       LogoutURLs: !Ref LogoutUrls
       AllowedOAuthFlows:
@@ -182,6 +306,46 @@ Resources:
         given_name: given_name
         family_name: family_name
         picture: picture
+        username: sub
+
+  # Microsoft OAuth Identity Provider
+  MicrosoftIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasMicrosoftCredentials
+    Properties:
+      UserPoolId: !Ref GitStreamUserPool
+      ProviderName: Microsoft
+      ProviderType: OIDC
+      ProviderDetails:
+        client_id: !Ref MicrosoftClientId
+        client_secret: !Ref MicrosoftClientSecret
+        authorize_scopes: 'openid email profile'
+        oidc_issuer: 'https://login.microsoftonline.com/common/v2.0'
+        attributes_request_method: GET
+      AttributeMapping:
+        email: email
+        given_name: given_name
+        family_name: family_name
+        username: sub
+
+  # LinkedIn OAuth Identity Provider
+  LinkedInIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasLinkedInCredentials
+    Properties:
+      UserPoolId: !Ref GitStreamUserPool
+      ProviderName: LinkedIn
+      ProviderType: OIDC
+      ProviderDetails:
+        client_id: !Ref LinkedInClientId
+        client_secret: !Ref LinkedInClientSecret
+        authorize_scopes: 'r_liteprofile r_emailaddress'
+        oidc_issuer: 'https://www.linkedin.com/oauth'
+        attributes_request_method: GET
+      AttributeMapping:
+        email: email
+        given_name: given_name
+        family_name: family_name
         username: sub
 
   # Custom Domain for Cognito
@@ -380,6 +544,20 @@ Outputs:
     Value: !Ref GoogleIdentityProvider
     Export:
       Name: !Sub '${Environment}-GitStream-GoogleProviderId'
+
+  MicrosoftIdentityProviderId:
+    Condition: HasMicrosoftCredentials
+    Description: 'Microsoft Identity Provider ID'
+    Value: !Ref MicrosoftIdentityProvider
+    Export:
+      Name: !Sub '${Environment}-GitStream-MicrosoftProviderId'
+
+  LinkedInIdentityProviderId:
+    Condition: HasLinkedInCredentials
+    Description: 'LinkedIn Identity Provider ID'
+    Value: !Ref LinkedInIdentityProvider
+    Export:
+      Name: !Sub '${Environment}-GitStream-LinkedInProviderId'
 
   AuthEventsLogGroup:
     Description: 'CloudWatch Log Group for Auth Events'
