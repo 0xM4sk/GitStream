@@ -1,8 +1,8 @@
 ---
-allowed-tools: Bash
+allowed-tools: StartBash, Bash, BashOutput, KillBash
 ---
 
-Run `bash .claude/scripts/pm/epic-list.sh` using a sub-agent and show me the complete output.
+Execute `bash ~/.claude/scripts/pm/epic-list.sh` and display the complete output.
 
 - You MUST display the complete output.
 - DO NOT truncate.

@@ -1,0 +1,17 @@
+{
+  "name": "claude-pm",
+  "version": "1.0.0",
+  "description": "Project management scripts and tools for Claude",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "project-management",
+    "cli",
+    "epics",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT"
+}

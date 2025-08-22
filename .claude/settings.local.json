@@ -1,11 +1,13 @@
 {
   "permissions": {
     "allow": [
+      "StartBash(*)",
       "Bash(bash .claude/scripts/test-and-log.sh:*)",
       "Bash(.claude/scripts/test-and-log.sh:*)",
       "Bash(bash .claude/scripts/pm/*)",
       "Bash(.claude/scripts/pm/*)",
-
+      "BashOutput(*)",
+      "KillBash(*)",
       "Bash(cat *)",
       "Bash(cat:*)",
       "Bash(composer *)",
