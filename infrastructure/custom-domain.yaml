@@ -1,0 +1,337 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Standalone Custom Domain Configuration for AWS Cognito User Pool'
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: Existing Cognito User Pool ID to attach custom domain
+    
+  DomainName:
+    Type: String
+    Description: Custom domain name (e.g., auth.gitstream.com)
+    
+  CertificateArn:
+    Type: String
+    Description: ARN of validated SSL certificate from ACM (must be in us-east-1)
+    
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource tagging
+    
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for automatic DNS record creation (optional)
+    Default: ""
+    
+  CreateRoute53Records:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Whether to automatically create Route 53 DNS records
+    
+  DNSTTLSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 86400
+    Description: TTL for DNS records in seconds
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+  ShouldCreateRoute53Records: !And 
+    - !Equals [!Ref CreateRoute53Records, "true"]
+    - !Condition HasHostedZone
+
+Resources:
+  # Custom Domain Configuration
+  CognitoCustomDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Domain: !Ref DomainName
+      CustomDomainConfig:
+        CertificateArn: !Ref CertificateArn
+
+  # Route 53 CNAME Record (conditional)
+  DomainCNAMERecord:
+    Type: AWS::Route53::RecordSet
+    Condition: ShouldCreateRoute53Records
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: CNAME
+      TTL: !Ref DNSTTLSeconds
+      ResourceRecords: 
+        - !GetAtt CognitoCustomDomain.CloudFrontDistribution
+
+  # Custom Resource for Domain Status Monitoring
+  DomainStatusFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'cognito-domain-status-${Environment}'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt DomainStatusRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          DOMAIN_NAME: !Ref DomainName
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import time
+
+          cognito_client = boto3.client('cognito-idp')
+
+          def lambda_handler(event, context):
+              """Monitor Cognito custom domain status and wait for completion"""
+              try:
+                  request_type = event['RequestType']
+                  domain_name = event['ResourceProperties']['DomainName']
+                  
+                  if request_type == 'Create' or request_type == 'Update':
+                      # Wait for domain to be ready
+                      max_attempts = 60  # 10 minutes maximum
+                      for attempt in range(max_attempts):
+                          try:
+                              response = cognito_client.describe_user_pool_domain(
+                                  Domain=domain_name
+                              )
+                              
+                              status = response['DomainDescription']['Status']
+                              cloudfront_domain = response['DomainDescription'].get('CloudFrontDistribution', '')
+                              
+                              if status == 'ACTIVE':
+                                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                                      'Status': status,
+                                      'CloudFrontDistribution': cloudfront_domain,
+                                      'DomainName': domain_name
+                                  })
+                                  return
+                              
+                              if status == 'FAILED':
+                                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                                      'Error': f'Domain configuration failed with status: {status}'
+                                  })
+                                  return
+                              
+                              # Still in progress, wait and retry
+                              time.sleep(10)
+                              
+                          except Exception as e:
+                              if 'ResourceNotFoundException' in str(e):
+                                  time.sleep(10)
+                                  continue
+                              raise e
+                      
+                      # Timeout reached
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {
+                          'Error': 'Timeout waiting for domain to become ACTIVE'
+                      })
+                      
+                  elif request_type == 'Delete':
+                      # Domain deletion is handled by the main resource
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      'Error': str(e)
+                  })
+
+  # IAM Role for Domain Status Function
+  DomainStatusRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'CognitoDomainStatusRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DomainStatusPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:DescribeUserPoolDomain
+                Resource: '*'
+
+  # Custom Resource to Monitor Domain Status
+  DomainStatusMonitor:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt DomainStatusFunction.Arn
+      DomainName: !Ref DomainName
+    DependsOn: CognitoCustomDomain
+
+  # CloudWatch Dashboard for Domain Monitoring
+  DomainMonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'Cognito-Domain-${Environment}-${DomainName}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "text",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 2,
+              "properties": {
+                "markdown": "# Cognito Custom Domain Monitoring: ${DomainName}\n\nEnvironment: **${Environment}** | CloudFront Distribution: **${CognitoCustomDomain.CloudFrontDistribution}**"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 2,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/CloudFront", "Requests", "DistributionId", "${CognitoCustomDomain.CloudFrontDistribution}" ],
+                  [ ".", "BytesDownloaded", ".", "." ],
+                  [ ".", "BytesUploaded", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-east-1",
+                "title": "CloudFront Traffic",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 2,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/CloudFront", "4xxErrorRate", "DistributionId", "${CognitoCustomDomain.CloudFrontDistribution}" ],
+                  [ ".", "5xxErrorRate", ".", "." ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-east-1",
+                "title": "Error Rates",
+                "period": 300,
+                "yAxis": {
+                  "left": {
+                    "min": 0,
+                    "max": 100
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 8,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/CloudFront", "OriginLatency", "DistributionId", "${CognitoCustomDomain.CloudFrontDistribution}" ]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "us-east-1",
+                "title": "Origin Latency",
+                "period": 300
+              }
+            }
+          ]
+        }
+
+  # CloudWatch Alarm for High Error Rate
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'Cognito-Domain-HighErrorRate-${Environment}'
+      AlarmDescription: 'High error rate on Cognito custom domain'
+      MetricName: 4xxErrorRate
+      Namespace: AWS/CloudFront
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DistributionId
+          Value: !GetAtt CognitoCustomDomain.CloudFrontDistribution
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for High Latency
+  HighLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'Cognito-Domain-HighLatency-${Environment}'
+      AlarmDescription: 'High latency on Cognito custom domain'
+      MetricName: OriginLatency
+      Namespace: AWS/CloudFront
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 5000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DistributionId
+          Value: !GetAtt CognitoCustomDomain.CloudFrontDistribution
+      TreatMissingData: notBreaching
+
+Outputs:
+  CustomDomainName:
+    Description: 'Custom domain name configured for Cognito'
+    Value: !Ref DomainName
+    Export:
+      Name: !Sub '${Environment}-Cognito-CustomDomain'
+
+  CloudFrontDistribution:
+    Description: 'CloudFront distribution domain for CNAME record'
+    Value: !GetAtt CognitoCustomDomain.CloudFrontDistribution
+    Export:
+      Name: !Sub '${Environment}-Cognito-CloudFrontDomain'
+
+  DomainStatus:
+    Description: 'Custom domain configuration status'
+    Value: !GetAtt DomainStatusMonitor.Status
+    Export:
+      Name: !Sub '${Environment}-Cognito-DomainStatus'
+
+  CognitoHostedUIURL:
+    Description: 'Cognito Hosted UI URL with custom domain'
+    Value: !Sub 'https://${DomainName}/login'
+    Export:
+      Name: !Sub '${Environment}-Cognito-HostedUIURL'
+
+  Route53Instructions:
+    Condition: ShouldCreateRoute53Records
+    Description: 'Route 53 CNAME record was automatically created'
+    Value: !Sub 'CNAME record created: ${DomainName} -> ${CognitoCustomDomain.CloudFrontDistribution}'
+
+  ManualDNSInstructions:
+    Condition: HasHostedZone
+    Description: 'Manual DNS configuration instructions'
+    Value: !Sub |
+      Create a CNAME record in your DNS provider:
+      Name: ${DomainName}
+      Type: CNAME  
+      Value: ${CognitoCustomDomain.CloudFrontDistribution}
+      TTL: ${DNSTTLSeconds} seconds
+
+  DashboardURL:
+    Description: 'CloudWatch Dashboard for monitoring this domain'
+    Value: !Sub 'https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${DomainMonitoringDashboard}'
