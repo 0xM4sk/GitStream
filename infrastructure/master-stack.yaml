@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Master CloudFormation stack for GitStream AWS Cognito Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource naming
+    
+  CustomDomain:
+    Type: String
+    Description: Custom domain for Cognito hosted UI (e.g., auth.gitstream.com)
+    
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for SSL certificate validation
+    
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID
+    NoEcho: true
+    
+  GoogleClientSecret:
+    Type: String
+    Description: Google OAuth Client Secret  
+    NoEcho: true
+    
+  MicrosoftClientId:
+    Type: String
+    Description: Microsoft OAuth Client ID (optional)
+    NoEcho: true
+    Default: ""
+    
+  MicrosoftClientSecret:
+    Type: String
+    Description: Microsoft OAuth Client Secret (optional)
+    NoEcho: true
+    Default: ""
+    
+  LinkedInClientId:
+    Type: String
+    Description: LinkedIn OAuth Client ID (optional)
+    NoEcho: true
+    Default: ""
+    
+  LinkedInClientSecret:
+    Type: String
+    Description: LinkedIn OAuth Client Secret (optional)
+    NoEcho: true
+    Default: ""
+    
+  CallbackUrls:
+    Type: CommaDelimitedList
+    Description: Comma-delimited list of callback URLs
+    Default: "http://localhost:3000/auth/callback"
+    
+  LogoutUrls:
+    Type: CommaDelimitedList
+    Description: Comma-delimited list of logout URLs
+    Default: "http://localhost:3000/auth/logout"
+    
+  SESEmailAddress:
+    Type: String
+    Description: SES verified email address for sending emails
+    Default: "noreply@gitstream.com"
+    
+  AlertEmail:
+    Type: String
+    Description: Email address for critical alerts
+    Default: "admin@gitstream.com"
+
+Resources:
+  # SSL Certificate Stack
+  CertificateStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: './certificate-manager.yaml'
+      Parameters:
+        DomainName: !Ref CustomDomain
+        HostedZoneId: !Ref HostedZoneId
+        Environment: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: GitStream
+        - Key: Component
+          Value: SSL-Certificate
+
+  # Cognito User Pool Stack
+  CognitoStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: CertificateStack
+    Properties:
+      TemplateURL: './cognito-user-pool.yaml'
+      Parameters:
+        Environment: !Ref Environment
+        CustomDomain: !Ref CustomDomain
+        CertificateArn: !GetAtt CertificateStack.Outputs.CertificateArn
+        GoogleClientId: !Ref GoogleClientId
+        GoogleClientSecret: !Ref GoogleClientSecret
+        MicrosoftClientId: !Ref MicrosoftClientId
+        MicrosoftClientSecret: !Ref MicrosoftClientSecret
+        LinkedInClientId: !Ref LinkedInClientId
+        LinkedInClientSecret: !Ref LinkedInClientSecret
+        CallbackUrls: !Join [",", !Ref CallbackUrls]
+        LogoutUrls: !Join [",", !Ref LogoutUrls]
+        SESEmailAddress: !Ref SESEmailAddress
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: GitStream
+        - Key: Component
+          Value: Cognito-UserPool
+
+  # CloudWatch Logging Stack
+  LoggingStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: CognitoStack
+    Properties:
+      TemplateURL: './cloudwatch-logging.yaml'
+      Parameters:
+        Environment: !Ref Environment
+        UserPoolId: !GetAtt CognitoStack.Outputs.UserPoolId
+        UserPoolArn: !GetAtt CognitoStack.Outputs.UserPoolArn
+        AlertEmail: !Ref AlertEmail
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: GitStream
+        - Key: Component
+          Value: CloudWatch-Logging
+
+  # Route 53 DNS record for custom domain (if hosted zone provided)
+  CognitoDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    DependsOn: CognitoStack
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref CustomDomain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt CognitoStack.Outputs.CognitoDomainCloudFrontDistribution
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront hosted zone ID
+        EvaluateTargetHealth: false
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+
+Outputs:
+  # Cognito Outputs
+  UserPoolId:
+    Description: 'Cognito User Pool ID'
+    Value: !GetAtt CognitoStack.Outputs.UserPoolId
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolId'
+
+  UserPoolClientId:
+    Description: 'Cognito User Pool Client ID'
+    Value: !GetAtt CognitoStack.Outputs.UserPoolClientId
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolClientId'
+
+  UserPoolArn:
+    Description: 'Cognito User Pool ARN'
+    Value: !GetAtt CognitoStack.Outputs.UserPoolArn
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolArn'
+
+  HostedUIUrl:
+    Description: 'Cognito Hosted UI URL'
+    Value: !GetAtt CognitoStack.Outputs.HostedUIUrl
+    Export:
+      Name: !Sub '${Environment}-GitStream-HostedUIUrl'
+
+  # Certificate Outputs
+  CertificateArn:
+    Description: 'SSL Certificate ARN'
+    Value: !GetAtt CertificateStack.Outputs.CertificateArn
+    Export:
+      Name: !Sub '${Environment}-GitStream-CertificateArn'
+
+  # Logging Outputs
+  AuthEventsLogGroup:
+    Description: 'CloudWatch Log Group for Auth Events'
+    Value: !GetAtt LoggingStack.Outputs.AuthEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-AuthLogGroup'
+
+  SecurityEventsLogGroup:
+    Description: 'CloudWatch Log Group for Security Events'
+    Value: !GetAtt LoggingStack.Outputs.SecurityEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-SecurityLogGroup'
+
+  # Dashboard and Monitoring
+  CognitoDashboard:
+    Description: 'CloudWatch Dashboard URL'
+    Value: !Sub 'https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${LoggingStack.Outputs.CognitoDashboard}'
+    Export:
+      Name: !Sub '${Environment}-GitStream-DashboardUrl'
+
+  # Deployment Information
+  StackStatus:
+    Description: 'Deployment status and next steps'
+    Value: !Sub |
+      GitStream Cognito Infrastructure deployed successfully!
+      
+      Next steps:
+      1. Configure DNS for domain ${CustomDomain} if not using Route 53
+      2. Verify SSL certificate validation
+      3. Test OAuth providers in Cognito console
+      4. Configure application with UserPoolId and ClientId
+      5. Monitor CloudWatch dashboard for authentication metrics
+      
+      Environment: ${Environment}
+      Region: ${AWS::Region}

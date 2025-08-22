@@ -1,0 +1,164 @@
+{
+  "dev": [
+    {
+      "ParameterKey": "Environment",
+      "ParameterValue": "dev"
+    },
+    {
+      "ParameterKey": "CustomDomain",
+      "ParameterValue": "auth-dev.gitstream.com"
+    },
+    {
+      "ParameterKey": "HostedZoneId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "GoogleClientId",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_ID"
+    },
+    {
+      "ParameterKey": "GoogleClientSecret",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_SECRET"
+    },
+    {
+      "ParameterKey": "MicrosoftClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "MicrosoftClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "CallbackUrls",
+      "ParameterValue": "http://localhost:3000/auth/callback,https://dev.gitstream.com/auth/callback"
+    },
+    {
+      "ParameterKey": "LogoutUrls",
+      "ParameterValue": "http://localhost:3000/auth/logout,https://dev.gitstream.com/auth/logout"
+    },
+    {
+      "ParameterKey": "SESEmailAddress",
+      "ParameterValue": "noreply@gitstream.com"
+    },
+    {
+      "ParameterKey": "AlertEmail",
+      "ParameterValue": "admin@gitstream.com"
+    }
+  ],
+  "staging": [
+    {
+      "ParameterKey": "Environment",
+      "ParameterValue": "staging"
+    },
+    {
+      "ParameterKey": "CustomDomain",
+      "ParameterValue": "auth-staging.gitstream.com"
+    },
+    {
+      "ParameterKey": "HostedZoneId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "GoogleClientId",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_ID"
+    },
+    {
+      "ParameterKey": "GoogleClientSecret",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_SECRET"
+    },
+    {
+      "ParameterKey": "MicrosoftClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "MicrosoftClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "CallbackUrls",
+      "ParameterValue": "https://staging.gitstream.com/auth/callback"
+    },
+    {
+      "ParameterKey": "LogoutUrls",
+      "ParameterValue": "https://staging.gitstream.com/auth/logout"
+    },
+    {
+      "ParameterKey": "SESEmailAddress",
+      "ParameterValue": "noreply@gitstream.com"
+    },
+    {
+      "ParameterKey": "AlertEmail",
+      "ParameterValue": "admin@gitstream.com"
+    }
+  ],
+  "prod": [
+    {
+      "ParameterKey": "Environment",
+      "ParameterValue": "prod"
+    },
+    {
+      "ParameterKey": "CustomDomain",
+      "ParameterValue": "auth.gitstream.com"
+    },
+    {
+      "ParameterKey": "HostedZoneId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "GoogleClientId",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_ID"
+    },
+    {
+      "ParameterKey": "GoogleClientSecret",
+      "ParameterValue": "REPLACE_WITH_GOOGLE_CLIENT_SECRET"
+    },
+    {
+      "ParameterKey": "MicrosoftClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "MicrosoftClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientId",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "LinkedInClientSecret",
+      "ParameterValue": ""
+    },
+    {
+      "ParameterKey": "CallbackUrls",
+      "ParameterValue": "https://gitstream.com/auth/callback"
+    },
+    {
+      "ParameterKey": "LogoutUrls",
+      "ParameterValue": "https://gitstream.com/auth/logout"
+    },
+    {
+      "ParameterKey": "SESEmailAddress",
+      "ParameterValue": "noreply@gitstream.com"
+    },
+    {
+      "ParameterKey": "AlertEmail",
+      "ParameterValue": "admin@gitstream.com"
+    }
+  ]
+}

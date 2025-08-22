@@ -1,0 +1,301 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS SES Email Templates for GitStream user authentication'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource naming
+  
+  SESEmailAddress:
+    Type: String
+    Description: SES verified email address for sending emails
+    Default: "noreply@gitstream.com"
+  
+  CustomDomain:
+    Type: String
+    Description: Custom domain for login links in emails
+    Default: "auth-dev.gitstream.com"
+
+Resources:
+  # Email template for password reset
+  PasswordResetEmailTemplate:
+    Type: AWS::SES::Template
+    Properties:
+      TemplateName: !Sub 'gitstream-password-reset-${Environment}'
+      Subject: 'Reset your GitStream password'
+      HtmlPart: !Sub |
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Reset your GitStream password</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">GitStream</h1>
+          </div>
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+            <h2 style="color: #495057; margin-top: 0;">Reset your password</h2>
+            <p style="font-size: 16px; margin-bottom: 25px;">We received a request to reset your GitStream password. Click the button below to create a new password.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="{{resetLink}}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+            </div>
+            <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="font-size: 12px; color: #007bff; word-break: break-all;">{{resetLink}}</p>
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 14px; color: #856404;"><strong>Security notice:</strong> This link will expire in 24 hours. If you didn't request this reset, please ignore this email.</p>
+            </div>
+            <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If you continue to have problems, please contact support.</p>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+            <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+          </div>
+        </body>
+        </html>
+      TextPart: !Sub |
+        GitStream - Reset your password
+        
+        We received a request to reset your GitStream password.
+        
+        To reset your password, click the following link:
+        {{resetLink}}
+        
+        If you didn't request this reset, please ignore this email.
+        This link will expire in 24 hours.
+        
+        If you continue to have problems, please contact support.
+        
+        GitStream Authentication Service
+
+  # Email template for welcome after successful registration
+  WelcomeEmailTemplate:
+    Type: AWS::SES::Template
+    Properties:
+      TemplateName: !Sub 'gitstream-welcome-${Environment}'
+      Subject: 'Welcome to GitStream!'
+      HtmlPart: !Sub |
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Welcome to GitStream!</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to GitStream!</h1>
+          </div>
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+            <h2 style="color: #495057; margin-top: 0;">Your account is ready!</h2>
+            <p style="font-size: 16px; margin-bottom: 25px;">Hi {{name}}, your GitStream account has been successfully created and verified. You can now access your personalized knowledge portal.</p>
+            <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 5px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #0c5460; margin-top: 0;">What's next?</h3>
+              <ul style="color: #0c5460; margin-bottom: 0;">
+                <li>Access your knowledge portal dashboard</li>
+                <li>Explore available documents and resources</li>
+                <li>Set up your preferences and notifications</li>
+              </ul>
+            </div>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://{{portalDomain}}/dashboard" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Go to Dashboard</a>
+            </div>
+            <p style="font-size: 14px; color: #6c757d; margin-top: 25px;">If you have any questions or need help getting started, don't hesitate to reach out to our support team.</p>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+            <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+          </div>
+        </body>
+        </html>
+      TextPart: !Sub |
+        Welcome to GitStream!
+        
+        Hi {{name}}, your GitStream account has been successfully created and verified.
+        You can now access your personalized knowledge portal.
+        
+        What's next?
+        - Access your knowledge portal dashboard
+        - Explore available documents and resources
+        - Set up your preferences and notifications
+        
+        Go to your dashboard: https://{{portalDomain}}/dashboard
+        
+        If you have any questions or need help getting started, don't hesitate to reach out to our support team.
+        
+        GitStream Authentication Service
+
+  # Email template for login notifications (optional security feature)
+  LoginNotificationTemplate:
+    Type: AWS::SES::Template
+    Properties:
+      TemplateName: !Sub 'gitstream-login-notification-${Environment}'
+      Subject: 'New sign-in to your GitStream account'
+      HtmlPart: !Sub |
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>New sign-in to your GitStream account</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">GitStream</h1>
+          </div>
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+            <h2 style="color: #495057; margin-top: 0;">New sign-in detected</h2>
+            <p style="font-size: 16px; margin-bottom: 25px;">Hi {{name}}, we detected a new sign-in to your GitStream account.</p>
+            <div style="background: #fff; border: 1px solid #dee2e6; border-radius: 5px; padding: 20px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Time:</strong> {{loginTime}}</p>
+              <p style="margin: 5px 0;"><strong>Location:</strong> {{location}}</p>
+              <p style="margin: 5px 0;"><strong>Device:</strong> {{device}}</p>
+              <p style="margin: 5px 0;"><strong>IP Address:</strong> {{ipAddress}}</p>
+            </div>
+            <p style="font-size: 14px; color: #28a745; margin: 20px 0;"><strong>If this was you:</strong> No action is needed. You can continue using GitStream normally.</p>
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 14px; color: #721c24;"><strong>If this wasn't you:</strong> Please secure your account immediately by changing your password and reviewing your recent activity.</p>
+            </div>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://{{customDomain}}/change-password" style="background: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin: 5px;">Change Password</a>
+              <a href="https://{{portalDomain}}/account/activity" style="background: #6c757d; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin: 5px;">View Activity</a>
+            </div>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+            <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+          </div>
+        </body>
+        </html>
+      TextPart: !Sub |
+        GitStream - New sign-in detected
+        
+        Hi {{name}}, we detected a new sign-in to your GitStream account.
+        
+        Time: {{loginTime}}
+        Location: {{location}}
+        Device: {{device}}
+        IP Address: {{ipAddress}}
+        
+        If this was you: No action is needed.
+        
+        If this wasn't you: Please secure your account immediately by changing your password.
+        
+        Change password: https://{{customDomain}}/change-password
+        View activity: https://{{portalDomain}}/account/activity
+        
+        GitStream Authentication Service
+
+  # IAM Role for SES sending
+  SESRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GitStreamSESRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cognito-idp.amazonaws.com
+                - ses.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SESEmailPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendTemplatedEmail
+                  - ses:SendRawEmail
+                Resource: 
+                  - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SESEmailAddress}'
+                  - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:template/*'
+
+  # SES Identity for sending emails
+  SESIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SESEmailAddress
+      ConfigurationSetAttributes:
+        ConfigurationSetName: !Ref SESConfigurationSet
+      DkimAttributes:
+        SigningEnabled: true
+      MailFromAttributes:
+        MailFromDomain: !Sub 'mail.${SESEmailAddress}'
+        BehaviorOnMxFailure: UseDefaultValue
+
+  # SES Configuration Set for tracking
+  SESConfigurationSet:
+    Type: AWS::SES::ConfigurationSet
+    Properties:
+      Name: !Sub 'gitstream-auth-${Environment}'
+      TrackingOptions:
+        CustomRedirectDomain: !Ref CustomDomain
+      DeliveryOptions:
+        TlsPolicy: Require
+      ReputationTrackingEnabled: true
+
+  # CloudWatch Event Rule for SES metrics
+  SESEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'GitStreamSESEvents-${Environment}'
+      Description: 'Capture SES email events for monitoring'
+      EventPattern:
+        source: ['aws.ses']
+        detail-type: 
+          - 'SES Email Event'
+        detail:
+          eventType: 
+            - 'send'
+            - 'delivery'
+            - 'bounce'
+            - 'complaint'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SESEventsLogGroup.Arn
+          Id: SESLogTarget
+
+  # CloudWatch Log Group for SES events
+  SESEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/ses/gitstream-${Environment}/events'
+      RetentionInDays: 30
+
+Outputs:
+  SESRoleArn:
+    Description: 'ARN of the SES IAM Role for Cognito'
+    Value: !GetAtt SESRole.Arn
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESRoleArn'
+
+  SESIdentityArn:
+    Description: 'ARN of the SES Identity'
+    Value: !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SESEmailAddress}'
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESIdentityArn'
+
+  PasswordResetTemplate:
+    Description: 'Password Reset Email Template Name'
+    Value: !Ref PasswordResetEmailTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-PasswordResetTemplate'
+
+  WelcomeTemplate:
+    Description: 'Welcome Email Template Name'
+    Value: !Ref WelcomeEmailTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-WelcomeTemplate'
+
+  LoginNotificationTemplate:
+    Description: 'Login Notification Email Template Name'
+    Value: !Ref LoginNotificationTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-LoginNotificationTemplate'
+
+  SESConfigurationSet:
+    Description: 'SES Configuration Set Name'
+    Value: !Ref SESConfigurationSet
+    Export:
+      Name: !Sub '${Environment}-GitStream-SESConfigurationSet'
