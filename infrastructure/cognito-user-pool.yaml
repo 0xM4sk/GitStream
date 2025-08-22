@@ -1,0 +1,400 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Cognito User Pool infrastructure for GitStream user authentication'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource naming
+  
+  CustomDomain:
+    Type: String
+    Description: Custom domain for Cognito hosted UI (e.g., auth.gitstream.com)
+  
+  CertificateArn:
+    Type: String
+    Description: ARN of SSL certificate from AWS Certificate Manager
+  
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth Client ID
+    NoEcho: true
+  
+  GoogleClientSecret:
+    Type: String
+    Description: Google OAuth Client Secret
+    NoEcho: true
+  
+  CallbackUrls:
+    Type: CommaDelimitedList
+    Description: Comma-delimited list of callback URLs
+    Default: "http://localhost:3000/auth/callback"
+  
+  LogoutUrls:
+    Type: CommaDelimitedList
+    Description: Comma-delimited list of logout URLs
+    Default: "http://localhost:3000/auth/logout"
+
+Resources:
+  # Cognito User Pool
+  GitStreamUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'gitstream-user-pool-${Environment}'
+      AliasAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          TemporaryPasswordValidityDays: 7
+      MfaConfiguration: OPTIONAL
+      EnabledMfas:
+        - SMS_MFA
+      SmsConfiguration:
+        SnsCallerArn: !GetAtt CognitoSMSRole.Arn
+        ExternalId: !Sub 'gitstream-external-${Environment}'
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+          Mutable: true
+        - AttributeDataType: String
+          Name: given_name
+          Required: true
+          Mutable: true
+        - AttributeDataType: String
+          Name: family_name
+          Required: true
+          Mutable: true
+        - AttributeDataType: String
+          Name: oauth_provider
+          Mutable: true
+          DeveloperOnlyAttribute: false
+        - AttributeDataType: String
+          Name: last_login_provider
+          Mutable: true
+          DeveloperOnlyAttribute: false
+      UserPoolTags:
+        Environment: !Ref Environment
+        Project: GitStream
+        Component: Authentication
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_LINK
+        EmailSubject: 'Verify your GitStream account'
+        EmailMessage: !Sub |
+          Welcome to GitStream! Please click the link below to verify your email address:
+          {##Verify Email##}
+          
+          If you didn't create this account, you can safely ignore this email.
+      UserPoolAddOns:
+        AdvancedSecurityMode: ENFORCED
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+        TemporaryPasswordValidityDays: 7
+        InviteMessageTemplate:
+          EmailSubject: 'Your GitStream account has been created'
+          EmailMessage: !Sub |
+            Welcome to GitStream! Your account has been created.
+            Username: {username}
+            Temporary password: {####}
+            Please sign in and change your password.
+
+  # IAM Role for SMS MFA
+  CognitoSMSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GitStreamCognitoSMSRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cognito-idp.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CognitoSMSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: '*'
+
+  # Cognito User Pool Client
+  GitStreamUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub 'gitstream-web-client-${Environment}'
+      UserPoolId: !Ref GitStreamUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+      CallbackURLs: !Ref CallbackUrls
+      LogoutURLs: !Ref LogoutUrls
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      PreventUserExistenceErrors: ENABLED
+      TokenValidityUnits:
+        IdToken: hours
+        AccessToken: hours
+        RefreshToken: days
+      IdTokenValidity: 1
+      AccessTokenValidity: 1
+      RefreshTokenValidity: 30
+      RefreshTokenValidityUnits: days
+
+  # Google OAuth Identity Provider
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref GitStreamUserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: 'openid email profile'
+      AttributeMapping:
+        email: email
+        given_name: given_name
+        family_name: family_name
+        picture: picture
+        username: sub
+
+  # Custom Domain for Cognito
+  CognitoDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref GitStreamUserPool
+      Domain: !Ref CustomDomain
+      CustomDomainConfig:
+        CertificateArn: !Ref CertificateArn
+
+  # CloudWatch Log Groups
+  AuthEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/auth-events'
+      RetentionInDays: 14
+
+  OAuthEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/oauth-events'
+      RetentionInDays: 14
+
+  SecurityEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/security-events'
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+  FailedLoginAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'GitStream-HighFailedLoginRate-${Environment}'
+      AlarmDescription: 'High rate of failed login attempts'
+      MetricName: SignInFailures
+      Namespace: 'AWS/Cognito'
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: UserPoolId
+          Value: !Ref GitStreamUserPool
+      TreatMissingData: notBreaching
+
+  # Lambda function for advanced logging (optional enhancement)
+  CognitoLoggingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'gitstream-cognito-logger-${Environment}'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt CognitoLoggingRole.Arn
+      Environment:
+        Variables:
+          LOG_GROUP_AUTH: !Ref AuthEventsLogGroup
+          LOG_GROUP_OAUTH: !Ref OAuthEventsLogGroup
+          LOG_GROUP_SECURITY: !Ref SecurityEventsLogGroup
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+
+          logs_client = boto3.client('logs')
+
+          def lambda_handler(event, context):
+              """Log Cognito events to CloudWatch with enhanced details"""
+              try:
+                  log_group = determine_log_group(event)
+                  log_stream = datetime.now().strftime('%Y/%m/%d')
+                  
+                  # Create log stream if it doesn't exist
+                  try:
+                      logs_client.create_log_stream(
+                          logGroupName=log_group,
+                          logStreamName=log_stream
+                      )
+                  except logs_client.exceptions.ResourceAlreadyExistsException:
+                      pass
+                  
+                  # Format and send log message
+                  message = format_log_message(event)
+                  logs_client.put_log_events(
+                      logGroupName=log_group,
+                      logStreamName=log_stream,
+                      logEvents=[{
+                          'timestamp': int(datetime.now().timestamp() * 1000),
+                          'message': json.dumps(message)
+                      }]
+                  )
+                  
+                  return {'statusCode': 200}
+              except Exception as e:
+                  print(f"Error logging event: {str(e)}")
+                  return {'statusCode': 500}
+
+          def determine_log_group(event):
+              """Determine which log group to use based on event type"""
+              event_type = event.get('triggerSource', '')
+              if 'SignIn' in event_type or 'SignUp' in event_type:
+                  return os.environ['LOG_GROUP_AUTH']
+              elif 'OAuth' in event_type or 'ExternalProvider' in event_type:
+                  return os.environ['LOG_GROUP_OAUTH']
+              else:
+                  return os.environ['LOG_GROUP_SECURITY']
+
+          def format_log_message(event):
+              """Format the event for logging"""
+              return {
+                  'timestamp': datetime.now().isoformat(),
+                  'eventType': event.get('triggerSource'),
+                  'userId': event.get('userName'),
+                  'userPoolId': event.get('userPoolId'),
+                  'clientId': event.get('callerContext', {}).get('clientId'),
+                  'sourceIp': event.get('request', {}).get('userContextData', {}).get('ipAddress'),
+                  'userAgent': event.get('request', {}).get('userContextData', {}).get('encodedData'),
+                  'region': event.get('region'),
+                  'eventData': event.get('request', {})
+              }
+
+  # IAM Role for Lambda logging function
+  CognitoLoggingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GitStreamCognitoLoggingRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 
+                  - !Sub '${AuthEventsLogGroup}*'
+                  - !Sub '${OAuthEventsLogGroup}*'
+                  - !Sub '${SecurityEventsLogGroup}*'
+
+  # Lambda Permission for Cognito to invoke the logging function
+  CognitoLoggingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CognitoLoggingFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt GitStreamUserPool.Arn
+
+Outputs:
+  UserPoolId:
+    Description: 'Cognito User Pool ID'
+    Value: !Ref GitStreamUserPool
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolId'
+
+  UserPoolClientId:
+    Description: 'Cognito User Pool Client ID'
+    Value: !Ref GitStreamUserPoolClient
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolClientId'
+
+  UserPoolArn:
+    Description: 'Cognito User Pool ARN'
+    Value: !GetAtt GitStreamUserPool.Arn
+    Export:
+      Name: !Sub '${Environment}-GitStream-UserPoolArn'
+
+  CognitoDomainName:
+    Description: 'Custom domain for Cognito hosted UI'
+    Value: !Ref CustomDomain
+    Export:
+      Name: !Sub '${Environment}-GitStream-CognitoDomain'
+
+  HostedUIUrl:
+    Description: 'Cognito Hosted UI URL'
+    Value: !Sub 'https://${CustomDomain}/login?client_id=${GitStreamUserPoolClient}&response_type=code&scope=openid+email+profile&redirect_uri=${CallbackUrls}'
+    Export:
+      Name: !Sub '${Environment}-GitStream-HostedUIUrl'
+
+  GoogleIdentityProviderId:
+    Description: 'Google Identity Provider ID'
+    Value: !Ref GoogleIdentityProvider
+    Export:
+      Name: !Sub '${Environment}-GitStream-GoogleProviderId'
+
+  AuthEventsLogGroup:
+    Description: 'CloudWatch Log Group for Auth Events'
+    Value: !Ref AuthEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-AuthLogGroup'
+
+  OAuthEventsLogGroup:
+    Description: 'CloudWatch Log Group for OAuth Events'
+    Value: !Ref OAuthEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-OAuthLogGroup'
+
+  SecurityEventsLogGroup:
+    Description: 'CloudWatch Log Group for Security Events'
+    Value: !Ref SecurityEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-SecurityLogGroup'

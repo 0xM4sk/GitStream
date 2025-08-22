@@ -1,0 +1,254 @@
+{
+  "providers": {
+    "google": {
+      "name": "Google",
+      "type": "Google",
+      "enabled": true,
+      "configuration": {
+        "client_id": "${GOOGLE_CLIENT_ID}",
+        "client_secret": "${GOOGLE_CLIENT_SECRET}",
+        "authorize_scopes": "openid email profile",
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
+        "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs"
+      },
+      "attribute_mapping": {
+        "email": "email",
+        "given_name": "given_name",
+        "family_name": "family_name",
+        "picture": "picture",
+        "username": "sub"
+      },
+      "setup_instructions": {
+        "console_url": "https://console.cloud.google.com/apis/credentials",
+        "steps": [
+          "1. Go to Google Cloud Console",
+          "2. Create or select a project",
+          "3. Enable Google+ API",
+          "4. Create OAuth 2.0 credentials",
+          "5. Add authorized redirect URIs",
+          "6. Copy Client ID and Client Secret"
+        ],
+        "redirect_uris": [
+          "https://auth.gitstream.com/oauth2/idpresponse",
+          "https://auth-staging.gitstream.com/oauth2/idpresponse",
+          "https://auth-dev.gitstream.com/oauth2/idpresponse"
+        ]
+      }
+    },
+    "microsoft": {
+      "name": "Microsoft",
+      "type": "SAML",
+      "enabled": false,
+      "configuration": {
+        "client_id": "${MICROSOFT_CLIENT_ID}",
+        "client_secret": "${MICROSOFT_CLIENT_SECRET}",
+        "authorize_scopes": "openid email profile",
+        "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        "userinfo_url": "https://graph.microsoft.com/v1.0/me",
+        "jwks_uri": "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+      },
+      "attribute_mapping": {
+        "email": "mail",
+        "given_name": "givenName",
+        "family_name": "surname",
+        "username": "id"
+      },
+      "setup_instructions": {
+        "console_url": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps",
+        "steps": [
+          "1. Go to Azure AD Portal",
+          "2. Navigate to App registrations",
+          "3. Create new registration",
+          "4. Configure authentication",
+          "5. Add redirect URIs",
+          "6. Generate client secret",
+          "7. Copy Application ID and secret"
+        ],
+        "redirect_uris": [
+          "https://auth.gitstream.com/oauth2/idpresponse",
+          "https://auth-staging.gitstream.com/oauth2/idpresponse",
+          "https://auth-dev.gitstream.com/oauth2/idpresponse"
+        ]
+      }
+    },
+    "linkedin": {
+      "name": "LinkedIn",
+      "type": "OIDC",
+      "enabled": false,
+      "configuration": {
+        "client_id": "${LINKEDIN_CLIENT_ID}",
+        "client_secret": "${LINKEDIN_CLIENT_SECRET}",
+        "authorize_scopes": "r_liteprofile r_emailaddress",
+        "authorize_url": "https://www.linkedin.com/oauth/v2/authorization",
+        "token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+        "userinfo_url": "https://api.linkedin.com/v2/people/~"
+      },
+      "attribute_mapping": {
+        "email": "emailAddress",
+        "given_name": "firstName.localized.en_US",
+        "family_name": "lastName.localized.en_US",
+        "username": "id"
+      },
+      "setup_instructions": {
+        "console_url": "https://www.linkedin.com/developers/apps",
+        "steps": [
+          "1. Go to LinkedIn Developers",
+          "2. Create new app",
+          "3. Configure OAuth 2.0 settings",
+          "4. Add redirect URLs",
+          "5. Request access to required products",
+          "6. Copy Client ID and Client Secret"
+        ],
+        "redirect_uris": [
+          "https://auth.gitstream.com/oauth2/idpresponse",
+          "https://auth-staging.gitstream.com/oauth2/idpresponse",
+          "https://auth-dev.gitstream.com/oauth2/idpresponse"
+        ]
+      }
+    }
+  },
+  "environment_config": {
+    "development": {
+      "domain": "auth-dev.gitstream.com",
+      "callback_urls": [
+        "http://localhost:3000/auth/callback",
+        "http://localhost:3001/auth/callback",
+        "https://auth-dev.gitstream.com/oauth2/idpresponse"
+      ],
+      "logout_urls": [
+        "http://localhost:3000/auth/logout",
+        "http://localhost:3001/auth/logout",
+        "https://auth-dev.gitstream.com/logout"
+      ]
+    },
+    "staging": {
+      "domain": "auth-staging.gitstream.com",
+      "callback_urls": [
+        "https://staging.gitstream.com/auth/callback",
+        "https://auth-staging.gitstream.com/oauth2/idpresponse"
+      ],
+      "logout_urls": [
+        "https://staging.gitstream.com/auth/logout",
+        "https://auth-staging.gitstream.com/logout"
+      ]
+    },
+    "production": {
+      "domain": "auth.gitstream.com",
+      "callback_urls": [
+        "https://gitstream.com/auth/callback",
+        "https://auth.gitstream.com/oauth2/idpresponse"
+      ],
+      "logout_urls": [
+        "https://gitstream.com/auth/logout",
+        "https://auth.gitstream.com/logout"
+      ]
+    }
+  },
+  "security_configuration": {
+    "token_validity": {
+      "id_token_hours": 1,
+      "access_token_hours": 1,
+      "refresh_token_days": 30
+    },
+    "password_policy": {
+      "minimum_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_symbols": true,
+      "temporary_password_validity_days": 7
+    },
+    "mfa_configuration": {
+      "enabled": true,
+      "enforcement": "optional",
+      "methods": ["SMS_MFA"],
+      "recovery_mechanisms": ["email"]
+    },
+    "rate_limiting": {
+      "sign_in_attempts_per_minute": 5,
+      "password_reset_attempts_per_hour": 3,
+      "account_creation_per_hour_per_ip": 10
+    },
+    "session_management": {
+      "concurrent_sessions": 5,
+      "idle_timeout_minutes": 60,
+      "absolute_timeout_hours": 8
+    }
+  },
+  "monitoring": {
+    "cloudwatch": {
+      "log_groups": {
+        "auth_events": "/aws/cognito/gitstream-user-pool/auth-events",
+        "oauth_events": "/aws/cognito/gitstream-user-pool/oauth-events",
+        "security_events": "/aws/cognito/gitstream-user-pool/security-events"
+      },
+      "metrics": {
+        "failed_logins": {
+          "threshold": 10,
+          "period_minutes": 1,
+          "action": "alert"
+        },
+        "new_registrations": {
+          "threshold": 20,
+          "period_minutes": 5,
+          "action": "monitor"
+        },
+        "token_refresh_failures": {
+          "threshold": 5,
+          "period_minutes": 5,
+          "action": "alert"
+        }
+      }
+    },
+    "alerts": {
+      "high_failed_login_rate": {
+        "enabled": true,
+        "threshold": 10,
+        "period": "1_minute",
+        "notification_channels": ["email", "slack"]
+      },
+      "oauth_provider_errors": {
+        "enabled": true,
+        "threshold": 5,
+        "period": "5_minutes",
+        "notification_channels": ["email"]
+      },
+      "unusual_registration_patterns": {
+        "enabled": true,
+        "threshold": 50,
+        "period": "1_hour",
+        "notification_channels": ["email"]
+      }
+    }
+  },
+  "deployment": {
+    "cloudformation": {
+      "template_path": "../infrastructure/cognito-user-pool.yaml",
+      "parameter_mappings": {
+        "GoogleClientId": "providers.google.configuration.client_id",
+        "GoogleClientSecret": "providers.google.configuration.client_secret",
+        "CallbackUrls": "environment_config.{environment}.callback_urls",
+        "LogoutUrls": "environment_config.{environment}.logout_urls"
+      }
+    },
+    "secrets_manager": {
+      "secrets": [
+        {
+          "name": "gitstream/oauth/google",
+          "keys": ["client_id", "client_secret"]
+        },
+        {
+          "name": "gitstream/oauth/microsoft",
+          "keys": ["client_id", "client_secret"]
+        },
+        {
+          "name": "gitstream/oauth/linkedin",
+          "keys": ["client_id", "client_secret"]
+        }
+      ]
+    }
+  }
+}

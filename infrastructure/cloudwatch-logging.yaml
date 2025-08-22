@@ -1,0 +1,516 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudWatch Logging and Monitoring for GitStream Cognito User Pool'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name for resource naming
+    
+  UserPoolId:
+    Type: String
+    Description: Cognito User Pool ID to monitor
+    
+  UserPoolArn:
+    Type: String
+    Description: Cognito User Pool ARN for permissions
+    
+  AlertEmail:
+    Type: String
+    Description: Email address for critical alerts
+    Default: admin@gitstream.com
+
+Resources:
+  # SNS Topic for Alerts
+  CognitoAlertsSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'gitstream-cognito-alerts-${Environment}'
+      DisplayName: 'GitStream Cognito Alerts'
+      
+  CognitoAlertsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref CognitoAlertsSnsTopic
+      Endpoint: !Ref AlertEmail
+
+  # CloudWatch Log Groups (already defined in main template, but including for completeness)
+  AuthEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/auth-events'
+      RetentionInDays: 14
+      
+  OAuthEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/oauth-events'
+      RetentionInDays: 14
+      
+  SecurityEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cognito/gitstream-user-pool-${Environment}/security-events'
+      RetentionInDays: 30
+
+  # Custom Metrics and Filters
+  FailedLoginMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AuthEventsLogGroup
+      FilterPattern: '[timestamp, request_id="FAILED_LOGIN", user_id, ...]'
+      MetricTransformations:
+        - MetricNamespace: 'GitStream/Cognito'
+          MetricName: 'FailedLogins'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  SuccessfulLoginMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AuthEventsLogGroup
+      FilterPattern: '[timestamp, request_id="SUCCESSFUL_LOGIN", user_id, ...]'
+      MetricTransformations:
+        - MetricNamespace: 'GitStream/Cognito'
+          MetricName: 'SuccessfulLogins'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  NewUserRegistrationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AuthEventsLogGroup
+      FilterPattern: '[timestamp, request_id="USER_REGISTRATION", user_id, ...]'
+      MetricTransformations:
+        - MetricNamespace: 'GitStream/Cognito'
+          MetricName: 'NewRegistrations'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  OAuthFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref OAuthEventsLogGroup
+      FilterPattern: '[timestamp, request_id="OAUTH_FAILURE", provider, ...]'
+      MetricTransformations:
+        - MetricNamespace: 'GitStream/Cognito'
+          MetricName: 'OAuthFailures'
+          MetricValue: '1'
+          DefaultValue: 0
+
+  # CloudWatch Alarms
+  HighFailedLoginRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'GitStream-HighFailedLoginRate-${Environment}'
+      AlarmDescription: 'High rate of failed login attempts detected'
+      MetricName: 'FailedLogins'
+      Namespace: 'GitStream/Cognito'
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref CognitoAlertsSnsTopic
+      TreatMissingData: notBreaching
+
+  UnusualRegistrationPatternAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'GitStream-UnusualRegistrationPattern-${Environment}'
+      AlarmDescription: 'Unusual number of new user registrations'
+      MetricName: 'NewRegistrations'
+      Namespace: 'GitStream/Cognito'
+      Statistic: Sum
+      Period: 3600  # 1 hour
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref CognitoAlertsSnsTopic
+      TreatMissingData: notBreaching
+
+  OAuthProviderFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'GitStream-OAuthProviderFailures-${Environment}'
+      AlarmDescription: 'Multiple OAuth provider failures detected'
+      MetricName: 'OAuthFailures'
+      Namespace: 'GitStream/Cognito'
+      Statistic: Sum
+      Period: 900  # 15 minutes
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref CognitoAlertsSnsTopic
+      TreatMissingData: notBreaching
+
+  # Lambda function for enhanced logging and metrics
+  EnhancedLoggingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'gitstream-cognito-enhanced-logging-${Environment}'
+      Runtime: python3.9
+      Handler: index.lambda_handler
+      Role: !GetAtt EnhancedLoggingRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          USER_POOL_ID: !Ref UserPoolId
+          LOG_GROUP_AUTH: !Ref AuthEventsLogGroup
+          LOG_GROUP_OAUTH: !Ref OAuthEventsLogGroup
+          LOG_GROUP_SECURITY: !Ref SecurityEventsLogGroup
+          SNS_TOPIC_ARN: !Ref CognitoAlertsSnsTopic
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime, timedelta
+          import uuid
+
+          cloudwatch = boto3.client('cloudwatch')
+          logs_client = boto3.client('logs')
+          sns_client = boto3.client('sns')
+
+          def lambda_handler(event, context):
+              """Enhanced logging and monitoring for Cognito events"""
+              try:
+                  # Process different types of Cognito events
+                  trigger_source = event.get('triggerSource', '')
+                  
+                  if trigger_source == 'PreSignUp_SignUp':
+                      handle_signup_event(event)
+                  elif trigger_source == 'PostAuthentication_Authentication':
+                      handle_successful_login(event)
+                  elif trigger_source == 'PreAuthentication_Authentication':
+                      handle_pre_authentication(event)
+                  elif 'OAuth' in trigger_source:
+                      handle_oauth_event(event)
+                  else:
+                      handle_generic_event(event)
+                  
+                  # Send metrics to CloudWatch
+                  send_custom_metrics(event)
+                  
+                  # Check for suspicious patterns
+                  check_security_patterns(event)
+                  
+                  return event
+                  
+              except Exception as e:
+                  print(f"Error in enhanced logging: {str(e)}")
+                  # Log error but don't fail the auth flow
+                  log_error(event, str(e))
+                  return event
+
+          def handle_signup_event(event):
+              """Handle user signup events"""
+              user_attributes = event.get('request', {}).get('userAttributes', {})
+              
+              log_data = {
+                  'event_type': 'USER_REGISTRATION',
+                  'timestamp': datetime.now().isoformat(),
+                  'user_id': event.get('userName'),
+                  'email': user_attributes.get('email'),
+                  'source_ip': get_source_ip(event),
+                  'user_agent': get_user_agent(event),
+                  'provider': user_attributes.get('identities', 'cognito')
+              }
+              
+              send_to_log_group(os.environ['LOG_GROUP_AUTH'], log_data)
+
+          def handle_successful_login(event):
+              """Handle successful login events"""
+              log_data = {
+                  'event_type': 'SUCCESSFUL_LOGIN',
+                  'timestamp': datetime.now().isoformat(),
+                  'user_id': event.get('userName'),
+                  'source_ip': get_source_ip(event),
+                  'user_agent': get_user_agent(event),
+                  'session_id': str(uuid.uuid4())
+              }
+              
+              send_to_log_group(os.environ['LOG_GROUP_AUTH'], log_data)
+
+          def handle_pre_authentication(event):
+              """Handle pre-authentication events (including failures)"""
+              # This would be called before authentication
+              # We can use this to track failed attempts
+              pass
+
+          def handle_oauth_event(event):
+              """Handle OAuth-related events"""
+              log_data = {
+                  'event_type': 'OAUTH_EVENT',
+                  'timestamp': datetime.now().isoformat(),
+                  'trigger_source': event.get('triggerSource'),
+                  'user_id': event.get('userName'),
+                  'source_ip': get_source_ip(event),
+                  'provider': extract_oauth_provider(event)
+              }
+              
+              send_to_log_group(os.environ['LOG_GROUP_OAUTH'], log_data)
+
+          def handle_generic_event(event):
+              """Handle other Cognito events"""
+              log_data = {
+                  'event_type': 'COGNITO_EVENT',
+                  'timestamp': datetime.now().isoformat(),
+                  'trigger_source': event.get('triggerSource'),
+                  'user_id': event.get('userName'),
+                  'source_ip': get_source_ip(event)
+              }
+              
+              send_to_log_group(os.environ['LOG_GROUP_SECURITY'], log_data)
+
+          def send_custom_metrics(event):
+              """Send custom metrics to CloudWatch"""
+              try:
+                  trigger_source = event.get('triggerSource', '')
+                  
+                  # Send metric based on event type
+                  if 'SignUp' in trigger_source:
+                      metric_name = 'NewRegistrations'
+                  elif 'Authentication' in trigger_source:
+                      metric_name = 'SuccessfulLogins'
+                  elif 'OAuth' in trigger_source:
+                      metric_name = 'OAuthEvents'
+                  else:
+                      metric_name = 'CognitoEvents'
+                  
+                  cloudwatch.put_metric_data(
+                      Namespace='GitStream/Cognito',
+                      MetricData=[
+                          {
+                              'MetricName': metric_name,
+                              'Value': 1,
+                              'Unit': 'Count',
+                              'Timestamp': datetime.now(),
+                              'Dimensions': [
+                                  {
+                                      'Name': 'Environment',
+                                      'Value': os.environ['ENVIRONMENT']
+                                  },
+                                  {
+                                      'Name': 'UserPoolId',
+                                      'Value': os.environ['USER_POOL_ID']
+                                  }
+                              ]
+                          }
+                      ]
+                  )
+              except Exception as e:
+                  print(f"Error sending metrics: {str(e)}")
+
+          def check_security_patterns(event):
+              """Check for suspicious patterns and alert if needed"""
+              source_ip = get_source_ip(event)
+              
+              # Check for rapid requests from same IP
+              # This is a simplified check - in production, you'd use more sophisticated analysis
+              if should_alert_on_pattern(event):
+                  send_security_alert(event, "Suspicious authentication pattern detected")
+
+          def should_alert_on_pattern(event):
+              """Determine if we should alert on this pattern"""
+              # Simplified logic - implement more sophisticated checks
+              return False
+
+          def send_security_alert(event, message):
+              """Send security alert via SNS"""
+              try:
+                  sns_client.publish(
+                      TopicArn=os.environ['SNS_TOPIC_ARN'],
+                      Subject=f"GitStream Security Alert - {os.environ['ENVIRONMENT']}",
+                      Message=f"{message}\n\nEvent details:\n{json.dumps(event, indent=2)}"
+                  )
+              except Exception as e:
+                  print(f"Error sending alert: {str(e)}")
+
+          def send_to_log_group(log_group, log_data):
+              """Send structured log data to CloudWatch Logs"""
+              try:
+                  log_stream = datetime.now().strftime('%Y/%m/%d')
+                  
+                  # Create log stream if it doesn't exist
+                  try:
+                      logs_client.create_log_stream(
+                          logGroupName=log_group,
+                          logStreamName=log_stream
+                      )
+                  except logs_client.exceptions.ResourceAlreadyExistsException:
+                      pass
+                  
+                  # Send log event
+                  logs_client.put_log_events(
+                      logGroupName=log_group,
+                      logStreamName=log_stream,
+                      logEvents=[{
+                          'timestamp': int(datetime.now().timestamp() * 1000),
+                          'message': json.dumps(log_data)
+                      }]
+                  )
+              except Exception as e:
+                  print(f"Error sending to log group: {str(e)}")
+
+          def get_source_ip(event):
+              """Extract source IP from event"""
+              return event.get('request', {}).get('userContextData', {}).get('ipAddress', 'unknown')
+
+          def get_user_agent(event):
+              """Extract user agent from event"""
+              return event.get('request', {}).get('userContextData', {}).get('encodedData', 'unknown')
+
+          def extract_oauth_provider(event):
+              """Extract OAuth provider from event"""
+              # This would parse the event to determine which OAuth provider
+              return event.get('request', {}).get('userAttributes', {}).get('identities', 'unknown')
+
+          def log_error(event, error_message):
+              """Log errors to security log group"""
+              error_data = {
+                  'event_type': 'LOGGING_ERROR',
+                  'timestamp': datetime.now().isoformat(),
+                  'error': error_message,
+                  'original_event': event
+              }
+              send_to_log_group(os.environ['LOG_GROUP_SECURITY'], error_data)
+
+  # IAM Role for Enhanced Logging Lambda
+  EnhancedLoggingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GitStreamEnhancedLoggingRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: 
+                  - !Sub '${AuthEventsLogGroup}*'
+                  - !Sub '${OAuthEventsLogGroup}*'
+                  - !Sub '${SecurityEventsLogGroup}*'
+        - PolicyName: CloudWatchMetricsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+        - PolicyName: SNSPublishPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref CognitoAlertsSnsTopic
+
+  # Permission for Cognito to invoke the Lambda function
+  EnhancedLoggingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EnhancedLoggingFunction
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Ref UserPoolArn
+
+  # CloudWatch Dashboard for monitoring
+  CognitoDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'GitStream-Cognito-${Environment}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["GitStream/Cognito", "SuccessfulLogins", "Environment", "${Environment}"],
+                  [".", "FailedLogins", ".", "."],
+                  [".", "NewRegistrations", ".", "."],
+                  [".", "OAuthEvents", ".", "."]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "us-east-1",
+                "title": "Authentication Metrics"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${AuthEventsLogGroup}'\n| fields @timestamp, event_type, user_id, source_ip\n| filter event_type = \"FAILED_LOGIN\"\n| sort @timestamp desc\n| limit 100",
+                "region": "us-east-1",
+                "title": "Recent Failed Logins"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  AuthEventsLogGroup:
+    Description: 'CloudWatch Log Group for Authentication Events'
+    Value: !Ref AuthEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-AuthLogGroup'
+
+  OAuthEventsLogGroup:
+    Description: 'CloudWatch Log Group for OAuth Events'
+    Value: !Ref OAuthEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-OAuthLogGroup'
+
+  SecurityEventsLogGroup:
+    Description: 'CloudWatch Log Group for Security Events'
+    Value: !Ref SecurityEventsLogGroup
+    Export:
+      Name: !Sub '${Environment}-GitStream-SecurityLogGroup'
+
+  CognitoAlertsSnsTopic:
+    Description: 'SNS Topic for Cognito Alerts'
+    Value: !Ref CognitoAlertsSnsTopic
+    Export:
+      Name: !Sub '${Environment}-GitStream-AlertsTopic'
+
+  EnhancedLoggingFunction:
+    Description: 'Lambda Function for Enhanced Logging'
+    Value: !Ref EnhancedLoggingFunction
+    Export:
+      Name: !Sub '${Environment}-GitStream-LoggingFunction'
+
+  CognitoDashboard:
+    Description: 'CloudWatch Dashboard for Cognito Monitoring'
+    Value: !Ref CognitoDashboard
+    Export:
+      Name: !Sub '${Environment}-GitStream-Dashboard'
