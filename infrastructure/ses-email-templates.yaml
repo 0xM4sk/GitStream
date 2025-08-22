@@ -183,6 +183,110 @@ Resources:
         
         GitStream Authentication Service
 
+  # Email template for account locked notification
+  AccountLockedEmailTemplate:
+    Type: AWS::SES::Template
+    Properties:
+      TemplateName: !Sub 'gitstream-account-locked-${Environment}'
+      Subject: 'Your GitStream account has been temporarily locked'
+      HtmlPart: !Sub |
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Account Temporarily Locked</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">GitStream Security Alert</h1>
+          </div>
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+            <h2 style="color: #495057; margin-top: 0;">Account Temporarily Locked</h2>
+            <p style="font-size: 16px; margin-bottom: 25px;">Hi {{name}}, your GitStream account has been temporarily locked for security reasons.</p>
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #721c24; margin-top: 0;">Security Details:</h3>
+              <p style="margin: 5px 0; color: #721c24;"><strong>Reason:</strong> {{lockReason}}</p>
+              <p style="margin: 5px 0; color: #721c24;"><strong>Unlock Time:</strong> {{unlockTime}}</p>
+            </div>
+            <p style="font-size: 14px; margin-top: 25px;">If you believe this is an error or need immediate access, please contact our support team.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="{{supportLink}}" style="background: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Contact Support</a>
+            </div>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+            <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Security Team</p>
+          </div>
+        </body>
+        </html>
+      TextPart: !Sub |
+        GitStream Security Alert - Account Temporarily Locked
+        
+        Hi {{name}}, your GitStream account has been temporarily locked for security reasons.
+        
+        Security Details:
+        Reason: {{lockReason}}
+        Unlock Time: {{unlockTime}}
+        
+        If you believe this is an error or need immediate access, please contact our support team.
+        
+        Contact Support: {{supportLink}}
+        
+        GitStream Security Team
+
+  # Email template for password changed confirmation
+  PasswordChangedEmailTemplate:
+    Type: AWS::SES::Template
+    Properties:
+      TemplateName: !Sub 'gitstream-password-changed-${Environment}'
+      Subject: 'Your GitStream password has been changed'
+      HtmlPart: !Sub |
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Password Changed</title>
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">GitStream</h1>
+          </div>
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
+            <h2 style="color: #495057; margin-top: 0;">Password Changed Successfully</h2>
+            <p style="font-size: 16px; margin-bottom: 25px;">Hi {{name}}, your GitStream account password has been successfully changed.</p>
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #155724; margin-top: 0;">Change Details:</h3>
+              <p style="margin: 5px 0; color: #155724;"><strong>Time:</strong> {{changeTime}}</p>
+              <p style="margin: 5px 0; color: #155724;"><strong>Status:</strong> Successful</p>
+            </div>
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 14px; color: #721c24;"><strong>If you didn't make this change:</strong> Your account may be compromised. Please contact support immediately.</p>
+            </div>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="{{supportLink}}" style="background: #6c757d; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin: 5px;">Contact Support</a>
+              <a href="https://{{customDomain}}/account/security" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin: 5px;">Security Settings</a>
+            </div>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 25px 0;">
+            <p style="font-size: 12px; color: #868e96; text-align: center;">GitStream Authentication Service</p>
+          </div>
+        </body>
+        </html>
+      TextPart: !Sub |
+        GitStream - Password Changed Successfully
+        
+        Hi {{name}}, your GitStream account password has been successfully changed.
+        
+        Change Details:
+        Time: {{changeTime}}
+        Status: Successful
+        
+        If you didn't make this change, your account may be compromised. Please contact support immediately.
+        
+        Contact Support: {{supportLink}}
+        Security Settings: https://{{customDomain}}/account/security
+        
+        GitStream Authentication Service
+
   # IAM Role for SES sending
   SESRole:
     Type: AWS::IAM::Role
@@ -293,6 +397,18 @@ Outputs:
     Value: !Ref LoginNotificationTemplate
     Export:
       Name: !Sub '${Environment}-GitStream-LoginNotificationTemplate'
+
+  AccountLockedTemplate:
+    Description: 'Account Locked Email Template Name'
+    Value: !Ref AccountLockedEmailTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-AccountLockedTemplate'
+
+  PasswordChangedTemplate:
+    Description: 'Password Changed Email Template Name'
+    Value: !Ref PasswordChangedEmailTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-PasswordChangedTemplate'
 
   SESConfigurationSet:
     Description: 'SES Configuration Set Name'

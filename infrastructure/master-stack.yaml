@@ -235,6 +235,18 @@ Outputs:
     Export:
       Name: !Sub '${Environment}-GitStream-LoginNotificationTemplate'
 
+  AccountLockedTemplate:
+    Description: 'Account Locked Email Template Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.AccountLockedTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-AccountLockedTemplate'
+
+  PasswordChangedTemplate:
+    Description: 'Password Changed Email Template Name'
+    Value: !GetAtt SESTemplatesStack.Outputs.PasswordChangedTemplate
+    Export:
+      Name: !Sub '${Environment}-GitStream-PasswordChangedTemplate'
+
   SESConfigurationSet:
     Description: 'SES Configuration Set Name'
     Value: !GetAtt SESTemplatesStack.Outputs.SESConfigurationSet
